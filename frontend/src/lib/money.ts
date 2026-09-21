@@ -39,8 +39,10 @@ export function parseAmountToCents(input: string): number | null {
       decPart = tail
     }
   }
+  // Los separadores de miles, si los hay, van cada 3 cifras: "1,2,3" es una errata, no 12,30 €.
+  if (!/^\d{1,3}([.,]\d{3})*$/.test(intPart) && !/^\d+$/.test(intPart)) return null
   intPart = intPart.replace(/[.,]/g, '')
-  if (!/^\d+$/.test(intPart) || !/^\d{0,2}$/.test(decPart)) return null
+  if (!/^\d{0,2}$/.test(decPart)) return null
   const cents = Number(intPart) * 100 + Number(decPart.padEnd(2, '0') || '0')
   return Number.isSafeInteger(cents) && cents > 0 ? cents : null
 }
