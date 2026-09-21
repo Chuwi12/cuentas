@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+/*
+ * Tokens de diseño. Metáfora: la libreta cuadriculada donde se hacen las
+ * cuentas del mes. Papel frío, tinta azul oscuro, y el boli rojo solo para
+ * corregir (cuando un cubo se pasa del objetivo).
+ * Utilidades generadas: bg-paper, text-ink, bg-needs, text-over, font-hand…
+ */
+@theme {
+  --color-paper: #F3F5F7;      /* fondo de página */
+  --color-sheet: #FFFFFF;      /* superficies elevadas: paneles, diálogos */
+  --color-grid: #D5DEE8;       /* cuadrícula y bordes */
+  --color-rule: #E4EAF0;       /* separadores suaves */
+  --color-ink: #1C2B3A;        /* texto principal */
+  --color-ink-soft: #52637A;   /* texto secundario (AA sobre paper y sheet) */
+  --color-ink-faint: #8093A8;  /* solo decorativo o texto grande */
+
+  /* Los tres cubos 50/30/20 */
+  --color-needs: #2B5F8A;
+  --color-needs-soft: #DCE8F3;
+  --color-wants: #B8487E;
+  --color-wants-soft: #F5E1EB;
+  --color-savings: #2E7D64;
+  --color-savings-soft: #DDEFE8;
+
+  /* Ingreso y corrección */
+  --color-income: #2E7D64;
+  --color-over: #C62828;       /* el boli rojo: solo para "te has pasado" y errores */
+  --color-over-soft: #FBE4E4;
+
+  --font-sans: "Schibsted Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-hand: "Caveat", "Segoe Print", cursive;
+
+  --radius-control: 6px;       /* botones e inputs */
+  --radius-panel: 10px;        /* paneles */
+
+  --shadow-lift: 0 1px 0 rgb(28 43 58 / 0.04), 0 8px 24px -12px rgb(28 43 58 / 0.18);
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-paper text-ink font-sans antialiased;
+    font-size: 16px;
+    line-height: 1.5;
+  }
+  /* Toda cifra de dinero se alinea en columna. */
+  .tabular { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+  :focus-visible {
+    outline: 2px solid var(--color-needs);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* Papel cuadriculado: se usa solo detrás del reparto del mes, no en toda la app. */
+@utility graph-paper {
+  background-color: var(--color-sheet);
+  background-image:
+    linear-gradient(var(--color-rule) 1px, transparent 1px),
+    linear-gradient(90deg, var(--color-rule) 1px, transparent 1px);
+  background-size: 16px 16px;
+  background-position: -1px -1px;
+}
+
+/* Diálogo nativo: fondo translúcido y entrada corta que muestra de dónde sale. */
+dialog::backdrop { background: rgb(28 43 58 / 0.35); }
+dialog[open] { animation: dialog-in 160ms ease-out; }
+@keyframes dialog-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}

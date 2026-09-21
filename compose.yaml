@@ -1,0 +1,20 @@
+services:
+  db:
+    image: docker.io/library/postgres:18-alpine
+    container_name: finanzas-db
+    environment:
+      POSTGRES_USER: finanzas
+      POSTGRES_PASSWORD: finanzas_dev
+      POSTGRES_DB: finanzas
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - finanzas-pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finanzas -d finanzas"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  finanzas-pgdata:
