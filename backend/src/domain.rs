@@ -22,8 +22,6 @@ pub enum Bucket {
 }
 
 impl Bucket {
-    pub const ALL: [Bucket; 3] = [Bucket::Needs, Bucket::Wants, Bucket::Savings];
-
     /// Porcentaje objetivo sobre los ingresos del mes.
     pub const fn target_pct(self) -> i64 {
         match self {

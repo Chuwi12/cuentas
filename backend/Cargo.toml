@@ -21,7 +21,7 @@ uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
 
 argon2 = "0.6"
-jsonwebtoken = "11"
+jsonwebtoken = { version = "11", features = ["rust_crypto"] }  # sin backend explícito hace panic al firmar
 
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

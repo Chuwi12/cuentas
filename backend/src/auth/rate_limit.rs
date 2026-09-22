@@ -17,6 +17,9 @@ use std::time::{Duration, Instant};
 
 const MAX_ATTEMPTS: usize = 10;
 const WINDOW: Duration = Duration::from_secs(15 * 60);
+/// Tope de claves en memoria. Sin él, alguien que pruebe emails aleatorios
+/// haría crecer el mapa sin límite (las claves que no se repiten nunca se podan).
+const MAX_KEYS: usize = 10_000;
 
 static ATTEMPTS: LazyLock<Mutex<HashMap<String, Vec<Instant>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
@@ -47,6 +50,17 @@ pub fn is_allowed(key: &str) -> bool {
 pub fn record_failure(key: &str) {
     let mut map = ATTEMPTS.lock().expect("el mutex de rate_limit está envenenado");
     let now = Instant::now();
+    if map.len() >= MAX_KEYS {
+        map.retain(|_, v| {
+            prune(v, now);
+            !v.is_empty()
+        });
+        // Si aun así está lleno, es un ataque de pulverización: se vacía. Se
+        // pierde el conteo de un email concreto, pero la memoria queda acotada.
+        if map.len() >= MAX_KEYS {
+            map.clear();
+        }
+    }
     let entry = map.entry(key.to_string()).or_default();
     prune(entry, now);
     entry.push(now);
@@ -62,10 +76,15 @@ pub fn clear(key: &str) {
 mod tests {
     use super::*;
 
+    /// Los tests comparten el mapa global: se serializan para que el de
+    /// pulverización (que lo vacía) no interfiera con los demás.
+    static SERIAL: Mutex<()> = Mutex::new(());
+
     // Claves únicas por test: el estado es un `static` compartido entre
     // tests que corren en paralelo.
     #[test]
     fn allows_up_to_max_attempts_then_blocks() {
+        let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
         let key = "test:allows_up_to_max_attempts_then_blocks";
         for _ in 0..MAX_ATTEMPTS {
             assert!(is_allowed(key));
@@ -77,7 +96,17 @@ mod tests {
     }
 
     #[test]
+    fn el_mapa_no_crece_sin_limite() {
+        let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        for i in 0..(MAX_KEYS + 50) {
+            record_failure(&format!("spray-{i}@example.com"));
+        }
+        assert!(ATTEMPTS.lock().unwrap().len() <= MAX_KEYS);
+    }
+
+    #[test]
     fn unknown_key_is_allowed() {
+        let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
         assert!(is_allowed("test:unknown_key_is_allowed"));
     }
 }

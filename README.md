@@ -54,6 +54,14 @@ docs/      contrato de la API
 scripts/   db.sh (PostgreSQL en podman) y dev.sh (todo junto)
 ```
 
+## Seguridad
+
+- Contraseñas con Argon2id; mínimo 12 caracteres.
+- Sesión en cookie `httpOnly` + `SameSite=Lax`: un script inyectado no puede leerla.
+- Tras 10 intentos fallidos con un mismo email, ese email queda bloqueado 15 minutos.
+  Consecuencia asumida: quien conozca tu email podría bloquearte el acceso durante ese
+  rato. El límite vive en memoria y se reinicia al reiniciar el backend.
+
 ## Producción
 
 Pon `COOKIE_SECURE=true` y sirve la app detrás de HTTPS. Sin HTTPS, la cookie de sesión y la

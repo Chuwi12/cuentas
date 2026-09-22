@@ -8,6 +8,10 @@ mod summary;
 mod transactions;
 
 use axum::Router;
+use axum::body::to_bytes;
+use axum::http::{StatusCode, header};
+use axum::middleware::map_response;
+use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use config::Config;
 use sqlx::postgres::PgPoolOptions;
@@ -59,6 +63,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     let app = Router::new()
         .nest("/api", api)
+        .layer(map_response(rejection_to_json))
         .layer(TraceLayer::new_for_http())
         .layer(CookieManagerLayer::new())
         .with_state(state);
@@ -70,6 +75,33 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .with_graceful_shutdown(shutdown_signal())
         .await?;
     Ok(())
+}
+
+/// Los rechazos de los extractores de axum (JSON mal formado, query o ruta
+/// inválidas) salen en texto plano y en inglés. Aquí se reescriben al formato
+/// de error del contrato para que el frontend siempre reciba
+/// `{"error": {"code", "message"}}`.
+async fn rejection_to_json(res: Response) -> Response {
+    let status = res.status();
+    let is_text = res
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.starts_with("text/plain"));
+    if !status.is_client_error() || !is_text {
+        return res;
+    }
+    let detail = to_bytes(res.into_body(), 4096)
+        .await
+        .map(|b| String::from_utf8_lossy(&b).into_owned())
+        .unwrap_or_default();
+    let (code, message) = match status {
+        StatusCode::NOT_FOUND => ("not_found", "No encontrado".to_string()),
+        StatusCode::METHOD_NOT_ALLOWED => ("not_found", "Método no permitido".to_string()),
+        _ => ("validation", format!("Datos no válidos: {detail}")),
+    };
+    let body = serde_json::json!({"error": {"code": code, "message": message}});
+    (status, axum::Json(body)).into_response()
 }
 
 async fn shutdown_signal() {

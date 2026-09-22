@@ -89,3 +89,29 @@ pub fn clear_cookie(secure: bool) -> Cookie<'static> {
         .max_age(Duration::seconds(0))
         .build()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SECRET: &[u8] = b"un-secreto-de-pruebas-de-al-menos-32-bytes";
+
+    /// Firma y verifica de verdad: detecta que falte el backend criptográfico de
+    /// jsonwebtoken (compila, pero hace panic en tiempo de ejecución).
+    #[test]
+    fn firma_y_verifica_un_token() {
+        let id = Uuid::new_v4();
+        let token = encode_token(id, SECRET, 1).unwrap();
+        let claims = decode_token(&token, SECRET).unwrap();
+        assert_eq!(claims.sub, id.to_string());
+    }
+
+    #[test]
+    fn rechaza_token_con_otro_secreto_o_caducado() {
+        let token = encode_token(Uuid::new_v4(), SECRET, 1).unwrap();
+        assert!(decode_token(&token, b"otro-secreto-distinto-de-32-bytes-o-mas").is_err());
+        let caducado = encode_token(Uuid::new_v4(), SECRET, -2).unwrap();
+        assert!(decode_token(&caducado, SECRET).is_err());
+        assert!(decode_token("basura", SECRET).is_err());
+    }
+}
