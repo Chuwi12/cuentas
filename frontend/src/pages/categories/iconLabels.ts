@@ -1,0 +1,47 @@
+// Nombres en español para los iconos de CATEGORY_ICONS (lib/icons.tsx), usados
+// en aria-label/tooltip del selector de iconos. Si el catálogo cerrado crece,
+// el fallback humaniza la clave kebab-case en vez de romper.
+const ICON_LABELS: Record<string, string> = {
+  wallet: 'Cartera',
+  'circle-plus': 'Más',
+  banknote: 'Billete',
+  briefcase: 'Maletín',
+  'hand-coins': 'Monedas en la mano',
+  house: 'Casa',
+  utensils: 'Cubiertos',
+  'shopping-cart': 'Carrito de la compra',
+  zap: 'Rayo',
+  wifi: 'Wifi',
+  smartphone: 'Móvil',
+  bus: 'Autobús',
+  car: 'Coche',
+  fuel: 'Combustible',
+  bike: 'Bicicleta',
+  plane: 'Avión',
+  dumbbell: 'Mancuerna',
+  shirt: 'Camiseta',
+  'party-popper': 'Fiesta',
+  coffee: 'Café',
+  'gamepad-2': 'Videojuegos',
+  tv: 'Televisión',
+  'book-open': 'Libro',
+  'graduation-cap': 'Estudios',
+  gift: 'Regalo',
+  heart: 'Salud',
+  pill: 'Medicamento',
+  stethoscope: 'Médico',
+  'paw-print': 'Mascota',
+  baby: 'Bebé',
+  wrench: 'Reparaciones',
+  laptop: 'Portátil',
+  receipt: 'Recibo',
+  'credit-card': 'Tarjeta',
+  'trending-up': 'Inversión',
+  'piggy-bank': 'Hucha',
+  landmark: 'Banco',
+  circle: 'Otro',
+}
+
+export function iconLabel(name: string): string {
+  return ICON_LABELS[name] ?? name.split('-').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ')
+}
