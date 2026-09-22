@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError, keys } from '../../lib/api'
 import { centsToInput, parseAmountToCents } from '../../lib/money'
@@ -118,6 +118,7 @@ export function TransactionDialog({ mode, transaction, categories, onClose, onSa
   }
 
   const saving = createM.isPending || updateM.isPending
+  const formId = useId()
 
   return (
     <Dialog
@@ -132,13 +133,14 @@ export function TransactionDialog({ mode, transaction, categories, onClose, onSa
               Guardar y añadir otro
             </Button>
           ) : null}
-          <Button type="button" loading={saving} onClick={() => handleSubmit(false)}>
+          {/* Botón de envío del <form> aunque viva en el pie del diálogo: así Enter envía. */}
+          <Button type="submit" form={formId} loading={saving}>
             {mode === 'create' ? 'Añadir movimiento' : 'Guardar cambios'}
           </Button>
         </>
       }
     >
-      <form className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); void handleSubmit(false) }}>
+      <form id={formId} className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); void handleSubmit(false) }}>
         {errors.general ? (
           <p role="alert" className="text-sm text-over">{errors.general}</p>
         ) : null}
