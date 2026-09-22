@@ -109,7 +109,7 @@ export default function LoginPage() {
         </div>
       </section>
 
-      <section className="flex items-center justify-center px-4 py-10 md:w-[26rem] md:shrink-0">
+      <section className="flex items-center justify-center px-4 py-10 md:flex-1 md:px-10">
         <div className="w-full max-w-96 bg-sheet border border-grid rounded-[var(--radius-panel)] shadow-[var(--shadow-lift)] p-6 md:p-8">
           {mode === null ? (
             status.isError ? (
