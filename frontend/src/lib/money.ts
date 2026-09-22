@@ -51,3 +51,8 @@ export function parseAmountToCents(input: string): number | null {
 export function centsToInput(cents: number): string {
   return (cents / 100).toFixed(2).replace('.', ',')
 }
+
+/** 46.66 → "46,7 %": coma decimal, como el resto de cifras de la app. */
+export function formatPct(value: number, digits = 1): string {
+  return `${value.toFixed(digits).replace('.', ',')} %`
+}

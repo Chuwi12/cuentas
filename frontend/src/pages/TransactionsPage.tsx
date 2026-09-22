@@ -89,7 +89,7 @@ export default function TransactionsPage() {
       </PageHeader>
 
       {flash ? (
-        <div role="status" className="mb-4 inline-flex items-center h-9 px-3 rounded-[var(--radius-control)] bg-savings-soft text-savings text-sm font-medium">
+        <div role="status" className="mb-4 inline-flex items-center h-9 px-3 rounded-[var(--radius-control)] bg-savings-soft text-savings-ink text-sm font-medium">
           {flash}
         </div>
       ) : null}

@@ -1,7 +1,7 @@
-import type { ReactNode } from 'react'
-import { ChevronLeft, ChevronRight, Search } from 'lucide-react'
+import { useId, useState, type ReactNode } from 'react'
+import { ChevronLeft, ChevronRight, Search, SlidersHorizontal } from 'lucide-react'
 import { BUCKET_ORDER, BUCKETS } from '../../lib/buckets'
-import { formatMonth, shiftMonth } from '../../lib/dates'
+import { formatMonthTitle, shiftMonth } from '../../lib/dates'
 import { Button, Segmented, Select, TextInput } from '../../components/ui'
 import type { Bucket, Category, Kind } from '../../lib/types'
 
@@ -39,6 +39,10 @@ export function TransactionFilters({
     return true
   })
 
+  const [moreOpen, setMoreOpen] = useState(false)
+  const moreId = useId()
+  const activeExtra = (bucket !== 'all' ? 1 : 0) + (categoryId !== 'all' ? 1 : 0) + (search.trim() ? 1 : 0)
+
   return (
     <div className="flex flex-wrap items-end gap-4 mb-5">
       <FilterGroup label="Mes">
@@ -47,7 +51,7 @@ export function TransactionFilters({
             onClick={() => onMonthChange(shiftMonth(month, -1))}>
             <ChevronLeft size={18} />
           </Button>
-          <span className="min-w-[12ch] text-center text-[15px] font-medium capitalize">{formatMonth(month)}</span>
+          <span className="min-w-[12ch] text-center text-[15px] font-medium">{formatMonthTitle(month)}</span>
           <Button type="button" variant="ghost" size="sm" aria-label="Mes siguiente"
             onClick={() => onMonthChange(shiftMonth(month, 1))}>
             <ChevronRight size={18} />
@@ -59,6 +63,20 @@ export function TransactionFilters({
         <Segmented value={kind} onChange={onKindChange} label="Tipo de movimiento" options={KIND_OPTIONS} />
       </FilterGroup>
 
+      {/* En móvil los filtros secundarios se pliegan para que la lista quede a la vista.
+          En escritorio `md:contents` los deja en la misma fila que los demás. */}
+      <Button
+        type="button" variant="secondary" size="sm"
+        className="md:hidden self-end"
+        aria-expanded={moreOpen}
+        aria-controls={moreId}
+        onClick={() => setMoreOpen((o) => !o)}
+      >
+        <SlidersHorizontal size={16} aria-hidden />
+        {activeExtra > 0 ? `Más filtros (${activeExtra})` : 'Más filtros'}
+      </Button>
+
+      <div id={moreId} className={`${moreOpen ? 'flex' : 'hidden'} w-full flex-col gap-4 md:contents`}>
       <FilterGroup label="Cubo">
         <Select
           aria-label="Cubo"
@@ -77,7 +95,7 @@ export function TransactionFilters({
           aria-label="Categoría"
           value={categoryId}
           onChange={(e) => onCategoryChange(e.target.value)}
-          className="w-56"
+          className="w-full md:w-56"
         >
           <option value="all">Todas las categorías</option>
           {categoryOptions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -96,6 +114,7 @@ export function TransactionFilters({
           />
         </div>
       </FilterGroup>
+      </div>
     </div>
   )
 }

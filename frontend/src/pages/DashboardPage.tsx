@@ -1,10 +1,10 @@
 import { useEffect } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
 import { api, keys } from '../lib/api'
 import { currentMonth, formatMonth } from '../lib/dates'
-import { cx, EmptyState, ErrorNote, PageHeader, Skeleton } from '../components/ui'
+import { EmptyState, ErrorNote, LinkButton, PageHeader, Skeleton } from '../components/ui'
 import { MonthNav } from './dashboard/MonthNav'
 import { AllocationBar } from './dashboard/AllocationBar'
 import { BucketColumns } from './dashboard/BucketColumns'
@@ -90,18 +90,11 @@ export default function DashboardPage() {
 }
 
 /** Acción principal: siempre el mismo verbo, botón u opción del estado vacío. */
-function AddTransactionLink({ className }: { className?: string }) {
+function AddTransactionLink() {
   return (
-    <Link
-      to="/movimientos?nuevo=1"
-      className={cx(
-        'inline-flex items-center justify-center gap-2 h-10 px-4 text-[15px] font-medium rounded-[var(--radius-control)]',
-        'bg-ink text-white hover:bg-[#2a3f55] transition-colors',
-        className,
-      )}
-    >
+    <LinkButton to="/movimientos?nuevo=1">
       <Plus size={18} aria-hidden /> Añadir movimiento
-    </Link>
+    </LinkButton>
   )
 }
 

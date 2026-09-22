@@ -1,6 +1,6 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { currentMonth, shiftMonth } from '../../lib/dates'
-import { capitalizeMonth } from './format'
+import { currentMonth, formatMonthTitle, shiftMonth } from '../../lib/dates'
+
 
 /** Selector de mes: mes anterior / mes siguiente. No deja pasar del mes actual. */
 export function MonthNav({ month, onChange }: { month: string; onChange: (month: string) => void }) {
@@ -15,7 +15,7 @@ export function MonthNav({ month, onChange }: { month: string; onChange: (month:
       >
         <ChevronLeft size={20} aria-hidden />
       </button>
-      <span className="min-w-[13ch] text-center text-[15px] font-medium">{capitalizeMonth(month)}</span>
+      <span className="min-w-[13ch] text-center text-[15px] font-medium">{formatMonthTitle(month)}</span>
       <button
         type="button"
         aria-label="Mes siguiente"

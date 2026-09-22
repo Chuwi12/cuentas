@@ -1,9 +1,10 @@
+import { currentMonth } from '../../lib/dates'
 import { Link } from 'react-router-dom'
 import { CategoryIcon } from '../../lib/icons'
 import { BUCKETS, BUCKET_ORDER } from '../../lib/buckets'
-import { formatCents } from '../../lib/money'
+import { formatCents, formatPct } from '../../lib/money'
 import { cx, Money, RedPenNote } from '../../components/ui'
-import { formatPct } from './format'
+
 import type { Bucket, BucketSummary, MonthSummary } from '../../lib/types'
 
 const COLUMN_BORDER: Record<Bucket, string> = {
@@ -41,7 +42,11 @@ export function BucketColumns({ summary, hasIncome }: { summary: MonthSummary; h
               <p className="text-lg font-semibold">{BUCKETS[key].label}</p>
               <p className="text-sm text-ink-soft">objetivo {b.target_pct} %</p>
               {key === 'savings' ? (
-                <p className="text-sm text-ink-soft mt-1">Incluye lo invertido y el dinero no gastado este mes.</p>
+                <p className="text-sm text-ink-soft mt-1">
+                  {summary.month === currentMonth()
+                    ? 'Incluye lo invertido y lo que aún no has gastado. El mes no ha terminado: esta cifra bajará con lo que gastes hasta fin de mes.'
+                    : 'Incluye lo invertido y el dinero no gastado este mes.'}
+                </p>
               ) : null}
 
               {hasIncome ? (
@@ -89,7 +94,7 @@ export function BucketColumns({ summary, hasIncome }: { summary: MonthSummary; h
         <p className="mt-6 text-sm text-ink-soft">
           Hay <Money cents={summary.uncategorized_expense_cents} kind="expense" className="text-ink" /> en gastos sin
           categoría.{' '}
-          <Link to="/movimientos" className="text-ink underline underline-offset-2 hover:text-needs">
+          <Link to="/movimientos" className="text-ink underline underline-offset-2 hover:text-needs-ink">
             Asígnales una categoría en Movimientos
           </Link>
           .

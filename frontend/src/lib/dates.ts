@@ -46,3 +46,10 @@ export function formatDay(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number)
   return dayFmt.format(new Date(y, m - 1, d)).replace('.', '')
 }
+
+/** "2026-09" → "Septiembre de 2026", para títulos y selectores de mes.
+ *  No uses la clase CSS `capitalize`: pondría "Septiembre De 2026". */
+export function formatMonthTitle(month: string): string {
+  const s = formatMonth(month)
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}

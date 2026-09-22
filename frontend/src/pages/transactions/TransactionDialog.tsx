@@ -145,7 +145,7 @@ export function TransactionDialog({ mode, transaction, categories, onClose, onSa
           <p role="alert" className="text-sm text-over">{errors.general}</p>
         ) : null}
         {localFlash ? (
-          <p role="status" className="text-sm text-savings font-medium">{localFlash}</p>
+          <p role="status" className="text-sm text-savings-ink font-medium">{localFlash}</p>
         ) : null}
 
         <Segmented value={kind} onChange={handleKindChange} label="Tipo de movimiento" options={KIND_OPTIONS} />

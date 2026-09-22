@@ -8,6 +8,7 @@ import {
   type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes,
 } from 'react'
 import { X } from 'lucide-react'
+import { Link, type LinkProps } from 'react-router-dom'
 import { BUCKETS } from '../lib/buckets'
 import { formatCents } from '../lib/money'
 import type { Bucket, Kind } from '../lib/types'
@@ -24,6 +25,18 @@ const variants: Record<Variant, string> = {
   danger: 'bg-over text-white hover:bg-[#a51f1f]',
 }
 
+/** Clases de botón, para que un enlace (LinkButton) se vea igual que un Button.
+ *  Ojo: `className` no puede anular `inline-flex` con `hidden` (en Tailwind gana
+ *  el orden de la hoja, no el del atributo). Para ocultar, envuelve en otro elemento. */
+function buttonClasses(variant: Variant, size: 'sm' | 'md', className?: string) {
+  return cx(
+    'inline-flex items-center justify-center gap-2 font-medium rounded-[var(--radius-control)]',
+    'transition-colors disabled:cursor-not-allowed select-none',
+    size === 'md' ? 'h-10 px-4 text-[15px]' : 'h-8 px-3 text-sm',
+    variants[variant], className,
+  )
+}
+
 export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: Variant; size?: 'sm' | 'md'; loading?: boolean
 }>(function Button({ variant = 'primary', size = 'md', loading, className, children, disabled, ...rest }, ref) {
@@ -32,12 +45,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLBut
       ref={ref}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-      className={cx(
-        'inline-flex items-center justify-center gap-2 font-medium rounded-[var(--radius-control)]',
-        'transition-colors disabled:cursor-not-allowed select-none',
-        size === 'md' ? 'h-10 px-4 text-[15px]' : 'h-8 px-3 text-sm',
-        variants[variant], className,
-      )}
+      className={buttonClasses(variant, size, className)}
       {...rest}
     >
       {loading ? <span className="size-4 rounded-full border-2 border-current border-r-transparent animate-spin" /> : null}
@@ -45,6 +53,13 @@ export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLBut
     </button>
   )
 })
+
+/** Enlace interno con aspecto de botón (navega, no ejecuta una acción). */
+export function LinkButton({ variant = 'primary', size = 'md', className, ...rest }: LinkProps & {
+  variant?: Variant; size?: 'sm' | 'md'
+}) {
+  return <Link className={buttonClasses(variant, size, className)} {...rest} />
+}
 
 // ── Campos de formulario ────────────────────────────────────────────────
 const control =

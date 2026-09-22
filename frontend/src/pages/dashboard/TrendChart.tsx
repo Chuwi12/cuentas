@@ -1,9 +1,9 @@
 import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { BUCKETS, BUCKET_ORDER } from '../../lib/buckets'
-import { formatMonthShort } from '../../lib/dates'
+import { formatMonthShort, formatMonthTitle } from '../../lib/dates'
 import { formatCents, formatCentsRound } from '../../lib/money'
 import { cx } from '../../components/ui'
-import { capitalizeMonth } from './format'
+
 import type { TrendPoint } from '../../lib/types'
 
 // --color-ink de app.css: la línea de ingreso usa la tinta del cuaderno, no
@@ -23,7 +23,7 @@ function TrendTooltip({
   const byKey = new Map(payload.map((p) => [String(p.dataKey), p.value ?? 0]))
   return (
     <div className="rounded-[var(--radius-control)] border border-grid bg-sheet px-3 py-2 text-sm shadow-[var(--shadow-lift)]">
-      <p className="font-medium mb-1">{capitalizeMonth(label)}</p>
+      <p className="font-medium mb-1">{formatMonthTitle(label)}</p>
       <dl className="flex flex-col gap-0.5">
         {BUCKET_ORDER.map((key) => (
           <div key={key} className="flex items-center justify-between gap-4">
@@ -44,11 +44,17 @@ function TrendTooltip({
 }
 
 /** Evolución de los últimos meses: barras apiladas needs/wants/savings + línea de ingreso. */
-export function TrendChart({ points }: { points: TrendPoint[] }) {
+export function TrendChart({ points: allPoints }: { points: TrendPoint[] }) {
+  // Los meses anteriores al primer movimiento no son "0 € de ingreso": es que
+  // aún no usabas la app. Dibujarlos como 0 inventaría una caída que no existió.
+  const first = allPoints.findIndex((p) => p.income_cents + p.needs_cents + p.wants_cents + p.savings_cents > 0)
+  const points = first === -1 ? allPoints : allPoints.slice(first)
+  // recharts anima por JS: la regla CSS de prefers-reduced-motion no le afecta.
+  const animate = !window.matchMedia('(prefers-reduced-motion: reduce)').matches
   return (
     <section>
       <h2 className="text-lg font-semibold mb-1">Evolución</h2>
-      <p className="text-sm text-ink-soft mb-4">Últimos {points.length} meses</p>
+      <p className="text-sm text-ink-soft mb-4">{points.length === 1 ? 'Este mes' : `Últimos ${points.length} meses`}</p>
 
       <div className="h-72">
         <ResponsiveContainer width="100%" height="100%">
@@ -69,10 +75,11 @@ export function TrendChart({ points }: { points: TrendPoint[] }) {
               width={60}
             />
             <Tooltip content={<TrendTooltip />} cursor={{ fill: 'var(--color-rule)' }} />
-            <Bar dataKey="needs_cents" name="Necesidades" stackId="gastos" fill={BUCKETS.needs.hex} />
-            <Bar dataKey="wants_cents" name="Deseos" stackId="gastos" fill={BUCKETS.wants.hex} />
-            <Bar dataKey="savings_cents" name="Ahorro" stackId="gastos" fill={BUCKETS.savings.hex} radius={[3, 3, 0, 0]} />
+            <Bar isAnimationActive={animate} dataKey="needs_cents" name="Necesidades" stackId="gastos" fill={BUCKETS.needs.hex} />
+            <Bar isAnimationActive={animate} dataKey="wants_cents" name="Deseos" stackId="gastos" fill={BUCKETS.wants.hex} />
+            <Bar isAnimationActive={animate} dataKey="savings_cents" name="Ahorro" stackId="gastos" fill={BUCKETS.savings.hex} radius={[3, 3, 0, 0]} />
             <Line
+              isAnimationActive={animate}
               dataKey="income_cents"
               name="Ingreso"
               stroke={INCOME_COLOR}
@@ -113,7 +120,7 @@ export function TrendChart({ points }: { points: TrendPoint[] }) {
             <tbody>
               {points.map((p) => (
                 <tr key={p.month} className="border-b border-rule last:border-0">
-                  <td className="py-1.5 pr-3">{capitalizeMonth(p.month)}</td>
+                  <td className="py-1.5 pr-3">{formatMonthTitle(p.month)}</td>
                   <td className="py-1.5 pr-3 tabular">{formatCents(p.income_cents)}</td>
                   <td className="py-1.5 pr-3 tabular">{formatCents(p.needs_cents)}</td>
                   <td className="py-1.5 pr-3 tabular">{formatCents(p.wants_cents)}</td>

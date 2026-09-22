@@ -33,7 +33,9 @@ export function CategoryRow({ category, onChangeBucket, bucketPending, onEdit, o
         {category.name}
       </span>
       {onChangeBucket && category.bucket ? (
-        <div className="w-[11.5rem] shrink-0">
+        // En móvil: segunda línea a todo el ancho, alineada bajo el nombre
+        // (pl-11 = icono de 2rem + hueco de 0.75rem), con el lápiz junto al nombre.
+        <div className="order-last basis-full pl-11 sm:order-none sm:basis-auto sm:w-[11.5rem] sm:pl-0 shrink-0">
           <Select
             aria-label={`Cubo de ${category.name}`}
             value={category.bucket}

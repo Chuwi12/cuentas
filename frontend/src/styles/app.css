@@ -15,16 +15,22 @@
   --color-ink-soft: #52637A;   /* texto secundario (AA sobre paper y sheet) */
   --color-ink-faint: #8093A8;  /* solo decorativo o texto grande */
 
-  /* Los tres cubos 50/30/20 */
-  --color-needs: #2B5F8A;
-  --color-needs-soft: #DCE8F3;
-  --color-wants: #B8487E;
-  --color-wants-soft: #F5E1EB;
-  --color-savings: #2E7D64;
-  --color-savings-soft: #DDEFE8;
+  /* Los tres cubos 50/30/20. Validados para daltonismo (protan/deutan ΔE ≥ 11,
+   * tritan 6,5 con etiquetas siempre presentes). Dos familias por cubo:
+   * relleno (barras, puntos) y -ink para TEXTO, oscurecida hasta WCAG AA sobre
+   * papel y sobre -soft: el ocre de Deseos como texto solo daría 2,8:1. */
+  --color-needs: #2463B5;
+  --color-needs-ink: #2463B5;
+  --color-needs-soft: #E0E9F5;
+  --color-wants: #D08B19;
+  --color-wants-ink: #8C6726;
+  --color-wants-soft: #F8EFDF;
+  --color-savings: #138A6B;
+  --color-savings-ink: #157761;
+  --color-savings-soft: #DEEFEA;
 
-  /* Ingreso y corrección */
-  --color-income: #2E7D64;
+  /* Ingreso (texto) y corrección */
+  --color-income: #157761;
   --color-over: #C62828;       /* el boli rojo: solo para "te has pasado" y errores */
   --color-over-soft: #FBE4E4;
 
@@ -47,8 +53,10 @@
     font-size: 16px;
     line-height: 1.5;
   }
-  /* Toda cifra de dinero se alinea en columna. */
-  .tabular { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+  /* Cifras de dinero. Schibsted Grotesk da ancho tabular también a la coma con
+   * `tnum` ("2100 , 00 €"), así que se usan cifras proporcionales y la
+   * alineación en columna la da el alineado a la derecha. */
+  .tabular { font-variant-numeric: lining-nums proportional-nums; }
 
   :focus-visible {
     outline: 2px solid var(--color-needs);
