@@ -120,6 +120,98 @@ falso. `delta_cents = actual - target` (positivo = por encima del objetivo).
 
 Ordenado del mes más antiguo al más reciente, incluyendo meses sin datos (a 0).
 
+### Informes — `/api/reports`
+
+Parámetros comunes (query string) de ambas rutas:
+
+| param    | valores                         | defecto   | notas |
+|----------|---------------------------------|-----------|-------|
+| `period` | `week` \| `month` \| `year`     | `month`   | La semana es ISO: lunes a domingo. |
+| `date`   | `YYYY-MM-DD`                    | hoy       | Cualquier día del periodo; el servidor lo normaliza. Rango válido 2000-01-01 a 2100-12-31. |
+| `scope`  | `expenses` \| `income` \| `all` | `all`     | Filtra `series`, `by_category`, `top_transactions` y el CSV. `totals`, `previous`, `buckets` e `insights` no dependen del scope. |
+
+Un valor inválido responde `422 validation` con el mensaje en español.
+
+`GET /api/reports`
+
+```jsonc
+{
+  "period":   { "kind": "month", "from": "2026-09-01", "to": "2026-09-30" },  // `to` inclusivo
+  "scope": "all",
+  "totals": {
+    "income_cents": 250000, "expense_cents": 180000, "net_cents": 70000,
+    "transaction_count": 42,
+    "savings_rate_bp": 2800        // net / income * 10000, redondeado; null si income == 0
+  },
+  "previous": {                     // mismo tipo de periodo, inmediatamente anterior
+    "period": { "kind": "month", "from": "2026-08-01", "to": "2026-08-31" },
+    "totals": { /* misma forma que totals */ }
+  },
+  "series": [                       // week: 7 días · month: cada día · year: 12 meses
+    { "from": "2026-09-01", "to": "2026-09-01", "income_cents": 0, "expense_cents": 1250 }
+  ],                                // siempre completa: los huecos salen a 0
+  "by_category": [                  // orden: amount_cents desc
+    { "category_id": "uuid|null", "name": "Supermercado", "color": "#16a34a",
+      "kind": "expense", "bucket": "needs", "amount_cents": 42000, "count": 9,
+      "share_bp": 2333 }            // % sobre el total de SU tipo en el periodo
+  ],                                // sin categoría: category_id null, name "Sin categoría", color "#9ca3af", bucket null
+  "buckets": [                      // solo gastos; siempre 4 filas en este orden
+    { "bucket": "needs",   "amount_cents": 90000, "target_cents": 125000, "income_share_bp": 3600 },
+    { "bucket": "wants",   "amount_cents": 60000, "target_cents": 75000,  "income_share_bp": 2400 },
+    { "bucket": "savings", "amount_cents": 20000, "target_cents": 50000,  "income_share_bp": 800 },
+    { "bucket": null,      "amount_cents": 10000, "target_cents": null,   "income_share_bp": 400 }
+  ],
+  "top_transactions": [             // máx. 10, mayor importe primero, dentro de scope
+    { "id": "uuid", "occurred_on": "2026-09-03", "kind": "expense", "amount_cents": 65000,
+      "description": "Alquiler", "category_name": "Vivienda", "category_color": "#2563eb" }
+  ],                                // description y category_* pueden ser null
+  "insights": [
+    { "code": "top_category", "level": "info",
+      "message": "Vivienda concentra el 36 % del gasto (650,00 €)." }
+  ]
+}
+```
+
+Porcentajes en puntos básicos enteros (`_bp`, 10000 = 100 %).
+
+- **Cubos.** `buckets` cuenta solo gasto registrado: a diferencia de `/api/summary`, no suma el
+  dinero no gastado al ahorro. Los objetivos usan el mismo reparto que el resumen (50 % y 30 %
+  truncados; el ahorro se lleva el resto). `target_cents` e `income_share_bp` son `null` si no
+  hubo ingresos; la fila sin cubo (gasto sin categoría) nunca tiene objetivo.
+- **Insights.** Describen el periodo completo, sea cual sea el `scope`. Van en este orden y se
+  omiten las que no aplican; `level` es `good`, `info` o `warning`:
+
+  | `code`            | nivel | cuándo |
+  |-------------------|-------|--------|
+  | `empty`           | info | no hay movimientos; es la única que se devuelve |
+  | `negative_net`    | warning | gastos mayores que ingresos |
+  | `savings_rate`    | good si ≥ 20 %, si no info | hay ingresos y `net >= 0` |
+  | `expense_change`  | warning si sube ≥ 15 %, good si baja ≥ 15 % | el gasto anterior es > 0 y el cambio llega al 15 % |
+  | `top_category`    | info | hay gastos: la categoría de mayor importe (incluye «Sin categoría») |
+  | `bucket_over`     | warning | solo `month`/`year` con ingresos: una por cubo necesidades/deseos que supera su objetivo |
+  | `largest_expense` | info | hay gastos |
+  | `daily_average`   | info | hay gastos; divide entre los días del periodo entero, no los transcurridos |
+  | `uncategorized`   | info | hay gasto sin categoría |
+
+`GET /api/reports/export.csv`
+
+Mismos parámetros más `detail=transactions|categories` (por defecto `transactions`).
+
+- Cabeceras: `Content-Type: text/csv; charset=utf-8`,
+  `Content-Disposition: attachment; filename="cuentas-<scope>-<period>-<from>.csv"`,
+  `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`.
+- Formato para Excel en español: UTF-8 con BOM, separador `;`, fin de línea CRLF y decimales con
+  coma (`-12,50`, sin separador de miles). Comillas y saltos de línea según RFC 4180.
+- Protección contra inyección de fórmulas: todo texto que empiece por `=`, `+`, `-`, `@`,
+  tabulador o retorno de carro se prefija con `'`. Los importes generados por el servidor no se tocan.
+- `transactions`: `fecha;tipo;categoría;cubo;descripción;importe`. Fecha `YYYY-MM-DD`, tipo
+  `ingreso|gasto`, cubo `necesidades|deseos|ahorro|` (vacío si no aplica), «Sin categoría» si no
+  tiene categoría, gastos en negativo. Orden: fecha y hora de alta ascendentes.
+- `categories`: `categoría;tipo;cubo;movimientos;importe;porcentaje`, con el importe firmado igual
+  que arriba y el porcentaje como `36,00` sobre el total de su tipo.
+- Máximo 100 000 filas; si se supera, `422 validation`
+  («Demasiados movimientos para exportar; acota el periodo»).
+
 ## Categorías semilla
 
 Creadas automáticamente al registrarse el usuario. El `bucket` es editable después.
