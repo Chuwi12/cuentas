@@ -8,7 +8,7 @@ IMAGE=docker.io/library/postgres:18-alpine
 VOLUME=finanzas-pgdata
 PORT=5433
 DB=finanzas
-USER=finanzas
+PGUSER=finanzas
 PASS=finanzas_dev
 
 case "${1:-up}" in
@@ -19,17 +19,17 @@ case "${1:-up}" in
     else
       podman volume exists "$VOLUME" || podman volume create "$VOLUME" >/dev/null
       podman run -d --name "$NAME" \
-        -e POSTGRES_USER="$USER" -e POSTGRES_PASSWORD="$PASS" -e POSTGRES_DB="$DB" \
+        -e POSTGRES_USER="$PGUSER" -e POSTGRES_PASSWORD="$PASS" -e POSTGRES_DB="$DB" \
         -p "127.0.0.1:$PORT:5432" \
         -v "$VOLUME:/var/lib/postgresql" \
-        --health-cmd "pg_isready -U $USER -d $DB" \
+        --health-cmd "pg_isready -U $PGUSER -d $DB" \
         --health-interval 5s --health-retries 10 \
         "$IMAGE" >/dev/null
       echo "contenedor $NAME creado"
     fi
     printf 'esperando a postgres'
     for _ in $(seq 1 40); do
-      if podman exec "$NAME" pg_isready -U "$USER" -d "$DB" >/dev/null 2>&1; then
+      if podman exec "$NAME" pg_isready -U "$PGUSER" -d "$DB" >/dev/null 2>&1; then
         echo " · listo en 127.0.0.1:$PORT"; exit 0
       fi
       printf '.'; sleep 1
@@ -38,7 +38,7 @@ case "${1:-up}" in
     ;;
   down)   podman stop "$NAME" >/dev/null && echo "$NAME parado" ;;
   logs)   podman logs -f "$NAME" ;;
-  psql)   podman exec -it "$NAME" psql -U "$USER" -d "$DB" ;;
+  psql)   podman exec -it "$NAME" psql -U "$PGUSER" -d "$DB" ;;
   status) podman ps --filter "name=$NAME" --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' ;;
   reset)
     # Borra TODOS los datos. Pregunta antes porque no tiene vuelta atrás.
