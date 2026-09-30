@@ -81,3 +81,78 @@ export interface CategoryInput {
   color: string
   icon: string
 }
+
+// ── Informes (GET /api/reports) ─────────────────────────────────────────
+export type ReportPeriodKind = 'week' | 'month' | 'year'
+export type ReportScope = 'expenses' | 'income' | 'all'
+export type InsightLevel = 'good' | 'info' | 'warning'
+
+export interface ReportPeriod {
+  kind: ReportPeriodKind
+  /** YYYY-MM-DD */
+  from: string
+  /** YYYY-MM-DD, inclusivo */
+  to: string
+}
+
+export interface ReportTotals {
+  income_cents: number
+  expense_cents: number
+  net_cents: number
+  transaction_count: number
+  /** Puntos básicos (10000 = 100 %). null si no hubo ingresos. */
+  savings_rate_bp: number | null
+}
+
+export interface ReportSeriesPoint {
+  from: string
+  to: string
+  income_cents: number
+  expense_cents: number
+}
+
+export interface ReportCategoryRow {
+  category_id: string | null
+  name: string
+  color: string
+  kind: Kind
+  bucket: Bucket | null
+  amount_cents: number
+  count: number
+  share_bp: number
+}
+
+export interface ReportBucketRow {
+  bucket: Bucket | null
+  amount_cents: number
+  target_cents: number | null
+  income_share_bp: number | null
+}
+
+export interface ReportTopTransaction {
+  id: string
+  occurred_on: string
+  kind: Kind
+  amount_cents: number
+  description: string | null
+  category_name: string | null
+  category_color: string | null
+}
+
+export interface ReportInsight {
+  code: string
+  level: InsightLevel
+  message: string
+}
+
+export interface Report {
+  period: ReportPeriod
+  scope: ReportScope
+  totals: ReportTotals
+  previous: { period: ReportPeriod; totals: ReportTotals }
+  series: ReportSeriesPoint[]
+  by_category: ReportCategoryRow[]
+  buckets: ReportBucketRow[]
+  top_transactions: ReportTopTransaction[]
+  insights: ReportInsight[]
+}

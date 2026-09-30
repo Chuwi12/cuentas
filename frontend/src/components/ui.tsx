@@ -5,7 +5,7 @@
  */
 import {
   forwardRef, useEffect, useId, useRef,
-  type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes,
+  type AnchorHTMLAttributes, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes,
 } from 'react'
 import { X } from 'lucide-react'
 import { Link, type LinkProps } from 'react-router-dom'
@@ -59,6 +59,13 @@ export function LinkButton({ variant = 'primary', size = 'md', className, ...res
   variant?: Variant; size?: 'sm' | 'md'
 }) {
   return <Link className={buttonClasses(variant, size, className)} {...rest} />
+}
+
+/** Enlace externo o de descarga (`<a href download>`) con aspecto de botón. */
+export function AnchorButton({ variant = 'primary', size = 'md', className, ...rest }: AnchorHTMLAttributes<HTMLAnchorElement> & {
+  variant?: Variant; size?: 'sm' | 'md'
+}) {
+  return <a className={buttonClasses(variant, size, className)} {...rest} />
 }
 
 // ── Campos de formulario ────────────────────────────────────────────────
