@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
-import { ListOrdered, LogOut, PieChart, Tags } from 'lucide-react'
+import { FileBarChart, ListOrdered, LogOut, PieChart, Tags } from 'lucide-react'
 import { api } from '../lib/api'
 import { useSession, useSetSession } from '../lib/auth'
 import { cx } from './ui'
@@ -9,6 +9,7 @@ const NAV = [
   { to: '/', label: 'Resumen', icon: PieChart, end: true },
   { to: '/movimientos', label: 'Movimientos', icon: ListOrdered, end: false },
   { to: '/categorias', label: 'Categorías', icon: Tags, end: false },
+  { to: '/informes', label: 'Informes', icon: FileBarChart, end: false },
 ]
 
 /** Barra lateral en escritorio, barra inferior en móvil. */
@@ -54,7 +55,7 @@ export function Layout() {
         <Outlet />
       </main>
 
-      <nav aria-label="Principal" className="md:hidden fixed inset-x-0 bottom-0 z-10 grid grid-cols-3 border-t border-grid bg-sheet pb-[env(safe-area-inset-bottom)]">
+      <nav aria-label="Principal" className="md:hidden fixed inset-x-0 bottom-0 z-10 grid grid-cols-4 border-t border-grid bg-sheet pb-[env(safe-area-inset-bottom)]">
         {NAV.map(({ to, label, icon: Icon, end }) => (
           <NavLink key={to} to={to} end={end} className={({ isActive }) => cx(
             'flex flex-col items-center justify-center gap-0.5 h-16 text-xs font-medium',

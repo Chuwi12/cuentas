@@ -1,4 +1,5 @@
-pub(crate) mod calc;
+mod calc;
+mod csv;
 mod handlers;
 
 use crate::state::AppState;

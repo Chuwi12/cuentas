@@ -79,7 +79,7 @@ pub fn normalize_email(raw: &str) -> Result<String, AppError> {
 /// un tope de 256 para no dejar que alguien mande megabytes al hasher).
 pub fn validate_password(password: &str) -> Result<(), AppError> {
     let len = password.chars().count();
-    if len < MIN_PASSWORD_LEN || len > MAX_PASSWORD_LEN {
+    if !(MIN_PASSWORD_LEN..=MAX_PASSWORD_LEN).contains(&len) {
         return Err(AppError::Validation(format!(
             "La contraseña debe tener entre {MIN_PASSWORD_LEN} y {MAX_PASSWORD_LEN} caracteres."
         )));

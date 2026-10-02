@@ -1,0 +1,28 @@
+# PostgreSQL de desarrollo como servicio de usuario (Quadlet).
+# Se instala con ./scripts/db.sh install (copia esto a ~/.config/containers/systemd/).
+[Unit]
+Description=PostgreSQL de finanzas (desarrollo)
+
+[Container]
+Image=docker.io/library/postgres:18-alpine
+ContainerName=finanzas-db
+Environment=POSTGRES_USER=finanzas
+Environment=POSTGRES_PASSWORD=finanzas_dev
+Environment=POSTGRES_DB=finanzas
+PublishPort=127.0.0.1:5433:5432
+# Mismo volumen con nombre que usaba db.sh: los datos existentes siguen valiendo.
+Volume=finanzas-pgdata:/var/lib/postgresql
+HealthCmd=pg_isready -U finanzas -d finanzas
+HealthInterval=5s
+HealthRetries=10
+# La imagen oficial ya declara SIGINT (fast shutdown); se fija por claridad.
+StopSignal=SIGINT
+StopTimeout=60
+
+[Service]
+Restart=on-failure
+# Holgura sobre StopTimeout para que systemd no mate el cgroup antes del checkpoint final.
+TimeoutStopSec=90
+
+[Install]
+WantedBy=default.target

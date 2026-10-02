@@ -1,5 +1,6 @@
 import type {
-  Category, CategoryInput, MonthSummary, Page, Transaction, TransactionInput, TrendPoint, User,
+  Category, CategoryInput, MonthSummary, Page, Report, ReportPeriodKind, ReportScope,
+  Transaction, TransactionInput, TrendPoint, User,
 } from './types'
 
 /** Error del backend con el `code` del contrato (`validation`, `conflict`…). */
@@ -57,6 +58,20 @@ export interface TransactionFilters {
   per_page?: number
 }
 
+export interface ReportParams {
+  period: ReportPeriodKind
+  /** Cualquier día dentro del periodo (YYYY-MM-DD). */
+  date: string
+  scope: ReportScope
+}
+
+export type ReportCsvDetail = 'transactions' | 'categories'
+
+/** URL de descarga del CSV. Mismo origen: la cookie de sesión viaja sola. */
+export function reportCsvUrl(p: ReportParams, detail: ReportCsvDetail): string {
+  return `/api/reports/export.csv${qs({ ...p, detail })}`
+}
+
 export const api = {
   auth: {
     status: () => request<{ registration_open: boolean }>('GET', '/auth/status'),
@@ -87,6 +102,9 @@ export const api = {
     month: (month?: string) => request<MonthSummary>('GET', `/summary${qs({ month })}`),
     trend: (months = 12) => request<{ points: TrendPoint[] }>('GET', `/summary/trend${qs({ months })}`),
   },
+  reports: {
+    get: (p: ReportParams) => request<Report>('GET', `/reports${qs({ ...p })}`),
+  },
 }
 
 /** Claves de react-query. Tras crear/editar/borrar movimientos o categorías,
@@ -98,4 +116,5 @@ export const keys = {
   transactions: (f: TransactionFilters) => ['finanzas', 'transactions', f] as const,
   summary: (month: string) => ['finanzas', 'summary', month] as const,
   trend: (months: number) => ['finanzas', 'trend', months] as const,
+  report: (p: ReportParams) => ['finanzas', 'report', p.period, p.date, p.scope] as const,
 }

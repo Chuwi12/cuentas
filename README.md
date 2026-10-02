@@ -99,14 +99,21 @@ Requisitos: Rust ≥ 1.94, Node ≥ 20 y podman.
 ```bash
 cp .env.example .env
 openssl rand -base64 48     # pega el resultado en JWT_SECRET dentro de .env
-./scripts/dev.sh            # BD (podman) + backend (:8080) + frontend (:5173)
+./scripts/db.sh install     # una sola vez: registra la BD como servicio de usuario (systemd)
+./scripts/dev.sh            # asegura la BD y arranca backend (:8080) + frontend (:5173)
 ```
 
-Abre http://localhost:5173 y crea tu cuenta.
+Abre http://localhost:5173 y crea tu cuenta. Ctrl+C para backend y frontend a la vez; la BD
+sigue en marcha y se para con `./scripts/db.sh down` (o sola, en orden, al apagar el equipo).
+
+La BD es un servicio independiente porque, si su ciclo de vida depende de una terminal o de un
+proceso suelto, el apagado del equipo puede cortar Postgres en mitad del checkpoint y corromper
+el clúster. Como servicio, systemd le envía SIGINT (apagado rápido y limpio) y espera a que
+termine antes de desmontar el almacenamiento del contenedor.
 
 | Comando | Qué hace |
 |---|---|
-| `./scripts/db.sh {up\|down\|status\|logs\|psql\|reset}` | Gestiona la BD de desarrollo |
+| `./scripts/db.sh {install\|uninstall\|up\|down\|status\|logs\|psql\|reset}` | Gestiona la BD de desarrollo |
 | `cd backend && cargo test` | Tests unitarios del backend |
 | `python3 scripts/e2e.py` | Prueba de punta a punta (solo sobre una BD **sin** usuario) |
 | `cd frontend && npx tsc -b && npx oxlint src` | Tipos y lint del frontend |

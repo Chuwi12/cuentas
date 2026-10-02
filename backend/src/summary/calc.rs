@@ -77,7 +77,7 @@ pub struct TrendPoint {
 /// céntimos → needs=500, wants=300, savings=201; el 20% "puro" de 1001 sería
 /// 200,2, pero el resto se lo lleva el cubo savings para que la suma cuadre).
 /// Si `income_cents` es 0, los tres objetivos son 0 sin dividir por cero.
-fn split_targets(income_cents: i64) -> (i64, i64, i64) {
+pub(crate) fn split_targets(income_cents: i64) -> (i64, i64, i64) {
     let needs = target_cents(income_cents, Bucket::Needs.target_pct());
     let wants = target_cents(income_cents, Bucket::Wants.target_pct());
     let savings = income_cents - needs - wants;
@@ -150,7 +150,7 @@ pub fn compute_summary(
         })
         .collect();
     // Orden descendente por importe.
-    by_category.sort_by(|a, b| b.amount_cents.cmp(&a.amount_cents));
+    by_category.sort_by_key(|c| std::cmp::Reverse(c.amount_cents));
 
     SummaryResponse {
         month,

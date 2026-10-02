@@ -3,6 +3,7 @@ mod categories;
 mod config;
 mod domain;
 mod error;
+mod reports;
 mod state;
 mod summary;
 mod transactions;
@@ -59,6 +60,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .nest("/categories", categories::routes())
         .nest("/transactions", transactions::routes())
         .nest("/summary", summary::routes())
+        .nest("/reports", reports::routes())
         .route("/health", get(|| async { "ok" }));
 
     let app = Router::new()
@@ -104,7 +106,32 @@ async fn rejection_to_json(res: Response) -> Response {
     (status, axum::Json(body)).into_response()
 }
 
+/// Termina ordenadamente con Ctrl+C y también con SIGTERM, que es lo que
+/// envían systemd y `kill`.
 async fn shutdown_signal() {
-    let _ = tokio::signal::ctrl_c().await;
+    let ctrl_c = async {
+        let _ = tokio::signal::ctrl_c().await;
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        use tokio::signal::unix::{SignalKind, signal};
+        match signal(SignalKind::terminate()) {
+            Ok(mut sigterm) => {
+                sigterm.recv().await;
+            }
+            Err(e) => {
+                tracing::warn!("no se pudo escuchar SIGTERM: {e}");
+                std::future::pending::<()>().await;
+            }
+        }
+    };
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
     tracing::info!("apagando");
 }
