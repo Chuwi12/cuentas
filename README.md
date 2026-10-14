@@ -88,9 +88,9 @@ alcance de JavaScript.
      movimiento.
    - La fuente separaba la coma decimal de las cifras ("2100 , 00 €").
 
-La prueba de punta a punta de la API está en [`scripts/e2e.py`](scripts/e2e.py): 46
-comprobaciones, con las cifras del 50/30/20 calculadas a mano. El backend tiene además 50 tests
-unitarios.
+La prueba de punta a punta de la API está en [`scripts/e2e.py`](scripts/e2e.py): 95
+comprobaciones, con las cifras del 50/30/20 y de los informes calculadas a mano. El backend tiene
+además 88 tests unitarios.
 
 ## Arrancar en local
 
