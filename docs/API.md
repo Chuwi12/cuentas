@@ -143,7 +143,7 @@ Un valor inválido responde `422 validation` con el mensaje en español.
   "totals": {
     "income_cents": 250000, "expense_cents": 180000, "net_cents": 70000,
     "transaction_count": 42,
-    "savings_rate_bp": 2800        // net / income * 10000, redondeado; null si income == 0
+    "savings_rate_bp": 3600        // ahorro / income * 10000, redondeado; null si income == 0
   },
   "previous": {                     // mismo tipo de periodo, inmediatamente anterior
     "period": { "kind": "month", "from": "2026-08-01", "to": "2026-08-31" },
@@ -157,11 +157,11 @@ Un valor inválido responde `422 validation` con el mensaje en español.
       "kind": "expense", "bucket": "needs", "amount_cents": 42000, "count": 9,
       "share_bp": 2333 }            // % sobre el total de SU tipo en el periodo
   ],                                // sin categoría: category_id null, name "Sin categoría", color "#9ca3af", bucket null
-  "buckets": [                      // solo gastos; siempre 4 filas en este orden
-    { "bucket": "needs",   "amount_cents": 90000, "target_cents": 125000, "income_share_bp": 3600 },
-    { "bucket": "wants",   "amount_cents": 60000, "target_cents": 75000,  "income_share_bp": 2400 },
-    { "bucket": "savings", "amount_cents": 20000, "target_cents": 50000,  "income_share_bp": 800 },
-    { "bucket": null,      "amount_cents": 10000, "target_cents": null,   "income_share_bp": 400 }
+  "buckets": [                      // siempre 4 filas en este orden
+    { "bucket": "needs",   "amount_cents": 90000, "unspent_cents": 0,     "target_cents": 125000, "income_share_bp": 3600 },
+    { "bucket": "wants",   "amount_cents": 60000, "unspent_cents": 0,     "target_cents": 75000,  "income_share_bp": 2400 },
+    { "bucket": "savings", "amount_cents": 90000, "unspent_cents": 70000, "target_cents": 50000,  "income_share_bp": 3600 },
+    { "bucket": null,      "amount_cents": 10000, "unspent_cents": 0,     "target_cents": null,   "income_share_bp": 400 }
   ],
   "top_transactions": [             // máx. 10, mayor importe primero, dentro de scope
     { "id": "uuid", "occurred_on": "2026-09-03", "kind": "expense", "amount_cents": 65000,
@@ -176,9 +176,13 @@ Un valor inválido responde `422 validation` con el mensaje en español.
 
 Porcentajes en puntos básicos enteros (`_bp`, 10000 = 100 %).
 
-- **Cubos.** `buckets` cuenta solo gasto registrado: a diferencia de `/api/summary`, no suma el
-  dinero no gastado al ahorro. Los objetivos usan el mismo reparto que el resumen (50 % y 30 %
-  truncados; el ahorro se lleva el resto). `target_cents` e `income_share_bp` son `null` si no
+- **Ahorro.** Misma definición que `/api/summary`: gasto en categorías del cubo `savings` más
+  `max(0, income − expense)`. La usan `totals.savings_rate_bp`, la fila `savings` de `buckets` y
+  el insight `savings_rate`, así que informe y resumen dan la misma cifra para el mismo mes. En el
+  ejemplo: 200 € invertidos + 700 € sin gastar = 900 € = 36 % de 2.500 €.
+- **Cubos.** Necesidades, deseos y sin cubo cuentan gasto registrado; la fila `savings` suma además
+  lo no gastado, que se desglosa en `unspent_cents` (0 en las demás filas). Los objetivos usan el
+  mismo reparto que el resumen (50 % y 30 % truncados; el ahorro se lleva el resto). `target_cents` e `income_share_bp` son `null` si no
   hubo ingresos; la fila sin cubo (gasto sin categoría) nunca tiene objetivo.
 - **Insights.** Describen el periodo completo, sea cual sea el `scope`. Van en este orden y se
   omiten las que no aplican; `level` es `good`, `info` o `warning`:
@@ -187,7 +191,7 @@ Porcentajes en puntos básicos enteros (`_bp`, 10000 = 100 %).
   |-------------------|-------|--------|
   | `empty`           | info | no hay movimientos; es la única que se devuelve |
   | `negative_net`    | warning | gastos mayores que ingresos |
-  | `savings_rate`    | good si ≥ 20 %, si no info | hay ingresos y `net >= 0` |
+  | `savings_rate`    | good si ≥ 20 %, si no info | hay ingresos y `net >= 0`; el % es `savings_rate_bp` |
   | `expense_change`  | warning si sube ≥ 15 %, good si baja ≥ 15 % | el gasto anterior es > 0 y el cambio llega al 15 % |
   | `top_category`    | info | hay gastos: la categoría de mayor importe (incluye «Sin categoría») |
   | `bucket_over`     | warning | solo `month`/`year` con ingresos: una por cubo necesidades/deseos que supera su objetivo |

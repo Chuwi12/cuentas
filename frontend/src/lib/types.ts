@@ -124,7 +124,10 @@ export interface ReportCategoryRow {
 
 export interface ReportBucketRow {
   bucket: Bucket | null
+  /** En el ahorro incluye lo no gastado (igual que el resumen). */
   amount_cents: number
+  /** Parte de `amount_cents` que es dinero no gastado; solo > 0 en el ahorro. */
+  unspent_cents: number
   target_cents: number | null
   income_share_bp: number | null
 }
