@@ -294,11 +294,13 @@ export function buildReportPdf(report: Report): jsPDF {
   }
 
   if (scope !== 'income') {
-    section('Reparto por cubos (gasto)', 45)
+    section('Reparto por cubos', 45)
     const hasTarget = report.buckets.some((b) => b.target_cents !== null)
+    const unspent = report.buckets.find((b) => b.bucket === 'savings')?.unspent_cents ?? 0
     if (!hasTarget) note('Sin ingresos en el periodo: no hay objetivo 50/30/20 con el que comparar.')
+    else if (unspent > 0) note(t(`El ahorro incluye ${formatCents(unspent)} que no se gastaron.`))
     runTable({
-      head: [['Cubo', 'Gastado', 'Objetivo', '% de los ingresos']],
+      head: [['Cubo', 'Importe', 'Objetivo', '% de los ingresos']],
       body: report.buckets.map((b) => [
         b.bucket ? BUCKET_LABEL[b.bucket] : 'Sin cubo',
         t(formatCents(b.amount_cents)),

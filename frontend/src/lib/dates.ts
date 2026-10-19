@@ -2,6 +2,10 @@
 
 const pad = (n: number) => String(n).padStart(2, '0')
 
+/** Rango de fechas que admite el backend (movimientos e informes). */
+export const MIN_DATE = '2000-01-01'
+export const MAX_DATE = '2100-12-31'
+
 export function todayISO(): string {
   const d = new Date()
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`

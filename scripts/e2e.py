@@ -55,6 +55,16 @@ for k,c,cat in [("expense",80000,"Alquiler"),("expense",30000,"Comida"),("expens
     s,b=tx(k,c,cat); check(f"alta gasto {cat}",s==201,(s,b))
 s,b=tx("expense",1000,"Nómina"); check("gasto con categoría de ingreso -> 422",s==422,(s,b))
 s,b=req("POST","/transactions",{"kind":"expense","amount_cents":0,"category_id":None,"occurred_on":D}); check("importe 0 -> 422",s==422,(s,b))
+MAXC=100_000_000_000
+s,b=req("POST","/transactions",{"kind":"expense","amount_cents":MAXC+1,"category_id":None,"occurred_on":D}); check("importe por encima del máximo -> 422",s==422 and "importe" in b["error"]["message"],(s,b))
+for day in ["1999-12-31","2101-01-01"]:
+    s,b=req("POST","/transactions",{"kind":"expense","amount_cents":100,"category_id":None,"occurred_on":day}); check(f"fecha {day} -> 422",s==422 and "fecha" in b["error"]["message"],(s,b))
+big=[tx("income",MAXC,"Nómina",day="2099-01-0"+str(i)) for i in (1,2)]
+check("dos importes máximos se aceptan",all(s==201 for s,_ in big),big)
+s,S99=req("GET","/summary?month=2099-01"); check("la suma de dos máximos no desborda el resumen",s==200 and S99["income_cents"]==2*MAXC,(s,S99))
+s,b=req("PATCH",f"/transactions/{big[0][1]['id']}",{"amount_cents":MAXC+1}); check("patch importe por encima del máximo -> 422",s==422,(s,b))
+s,b=req("PATCH",f"/transactions/{big[0][1]['id']}",{"occurred_on":"2101-01-01"}); check("patch fecha fuera de rango -> 422",s==422,(s,b))
+for _,b in big: req("DELETE",f"/transactions/{b['id']}")
 tx("expense",12345,"Comida",day=PREV+"-15")
 
 s,S=req("GET",f"/summary?month={M}"); bk={x["bucket"]:x for x in S["buckets"]}
@@ -82,7 +92,8 @@ s,b=req("GET","/summary?month=2026-13"); check("mes inválido -> 422",s==422,(s,
 TODAY=datetime.date.today(); LASTD=calendar.monthrange(TODAY.year,TODAY.month)[1]
 s,R=req("GET",f"/reports?period=month&date={D}")
 check("informe mes: periodo completo",s==200 and R["period"]=={"kind":"month","from":M+"-01","to":f"{M}-{LASTD:02d}"},R.get("period") if s==200 else (s,R))
-check("informe: totales (ingreso 2100, gasto 1790, neto 310, 7 mov., ahorro 14,76 %)",R["totals"]=={"income_cents":210000,"expense_cents":179000,"net_cents":31000,"transaction_count":7,"savings_rate_bp":1476},R["totals"])
+check("informe: totales (ingreso 2100, gasto 1790, neto 310, 7 mov., ahorro (200 invertidos + 310 sin gastar) / 2100 = 24,29 %)",R["totals"]=={"income_cents":210000,"expense_cents":179000,"net_cents":31000,"transaction_count":7,"savings_rate_bp":2429},R["totals"])
+check("informe: tasa de ahorro = ahorro del resumen",round(R["totals"]["savings_rate_bp"]/100,1)==bk["savings"]["actual_pct"] and bk["savings"]["actual_cents"]==51000,(R["totals"]["savings_rate_bp"],bk["savings"]))
 check("informe: periodo anterior (mes previo, gasto 123,45, sin ingresos -> tasa null)",R["previous"]["period"]["from"]==PREV+"-01" and R["previous"]["totals"]=={"income_cents":0,"expense_cents":12345,"net_cents":-12345,"transaction_count":1,"savings_rate_bp":None},R["previous"])
 check("informe: serie con todos los días del mes",len(R["series"])==LASTD and R["series"][0]["from"]==M+"-01" and R["series"][-1]["to"]==f"{M}-{LASTD:02d}",len(R["series"]))
 check("informe: serie suma los totales y el día 10 concentra todo",sum(x["expense_cents"] for x in R["series"])==179000 and sum(x["income_cents"] for x in R["series"])==210000 and R["series"][9]["expense_cents"]==179000,R["series"][9])
@@ -92,13 +103,13 @@ unc=[c for c in bc if c["category_id"] is None]
 check("por categoría: sin categoría con nombre, color y cubo null",len(unc)==1 and unc[0]["name"]=="Sin categoría" and unc[0]["color"]=="#9ca3af" and unc[0]["bucket"] is None and unc[0]["amount_cents"]==5000,unc)
 bu=R["buckets"]
 check("cubos: 4 filas en orden",[x["bucket"] for x in bu]==["needs","wants","savings",None],bu)
-check("cubos: importes, objetivos y % de ingresos",[(x["amount_cents"],x["target_cents"],x["income_share_bp"]) for x in bu]==[(114000,105000,5429),(40000,63000,1905),(20000,42000,952),(5000,None,238)],bu)
+check("cubos: importes, sin gastar, objetivos y % de ingresos (ahorro = 200 + 310 sin gastar)",[(x["amount_cents"],x["unspent_cents"],x["target_cents"],x["income_share_bp"]) for x in bu]==[(114000,0,105000,5429),(40000,0,63000,1905),(51000,31000,42000,2429),(5000,0,None,238)],bu)
 tt=R["top_transactions"]
 check("top: 7 movimientos, mayor primero, con categoría",len(tt)==7 and tt[0]["amount_cents"]==210000 and tt[0]["category_name"]=="Nómina" and tt[1]["description"] is None,tt[:2])
 codes=[i["code"] for i in R["insights"]]
 check("insights esperados y en orden",codes==["savings_rate","expense_change","top_category","bucket_over","largest_expense","daily_average","uncategorized"],codes)
 ins={i["code"]:i for i in R["insights"]}
-check("insight: ahorro 15 % (info) y gasto sube (warning)",ins["savings_rate"]["level"]=="info" and "15 %" in ins["savings_rate"]["message"] and ins["expense_change"]["level"]=="warning",ins)
+check("insight: ahorro 24 % (good) y gasto sube (warning)",ins["savings_rate"]["level"]=="good" and "24 %" in ins["savings_rate"]["message"] and ins["expense_change"]["level"]=="warning",ins)
 check("insight: dinero en formato español",ins["top_category"]["message"]=="Alquiler concentra el 45 % del gasto (800,00 €)." and ins["uncategorized"]["message"]=="Hay 50,00 € en gastos sin categoría.",ins["top_category"])
 
 s,E=req("GET",f"/reports?period=month&date={D}&scope=expenses")

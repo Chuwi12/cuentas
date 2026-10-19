@@ -2,15 +2,12 @@
 //! por cubos, reglas de `insights` y formato de dinero en español. Sin BD ni
 //! reloj (la fecha de hoy entra como parámetro), para poder testearlo todo.
 
-use crate::domain::{Bucket, Kind};
+use crate::domain::{Bucket, Kind, MAX_DATE, MIN_DATE};
 use crate::error::{AppError, AppResult};
-use crate::summary::calc::split_targets;
+use crate::summary::calc::{savings_cents, split_targets};
 use chrono::{Datelike, Days, NaiveDate};
 use serde::Serialize;
 use uuid::Uuid;
-
-pub const MIN_DATE: NaiveDate = NaiveDate::from_ymd_opt(2000, 1, 1).unwrap();
-pub const MAX_DATE: NaiveDate = NaiveDate::from_ymd_opt(2100, 12, 31).unwrap();
 
 pub const UNCATEGORIZED_NAME: &str = "Sin categoría";
 pub const UNCATEGORIZED_COLOR: &str = "#9ca3af";
@@ -208,18 +205,27 @@ pub struct Totals {
     pub expense_cents: i64,
     pub net_cents: i64,
     pub transaction_count: i64,
-    /// net / income en puntos básicos; `None` si no hay ingresos.
+    /// Ahorro / ingresos en puntos básicos, con la misma definición de ahorro
+    /// que `/api/summary` (ver [`savings_cents`]); `None` si no hay ingresos.
     pub savings_rate_bp: Option<i64>,
 }
 
-pub fn make_totals(income_cents: i64, expense_cents: i64, transaction_count: i64) -> Totals {
+/// `savings_expense_cents`: lo gastado en categorías del cubo `savings`, que
+/// ya va incluido en `expense_cents`.
+pub fn make_totals(
+    income_cents: i64,
+    expense_cents: i64,
+    savings_expense_cents: i64,
+    transaction_count: i64,
+) -> Totals {
     let net_cents = income_cents - expense_cents;
+    let savings = savings_cents(income_cents, expense_cents, savings_expense_cents);
     Totals {
         income_cents,
         expense_cents,
         net_cents,
         transaction_count,
-        savings_rate_bp: ratio_bp(net_cents, income_cents),
+        savings_rate_bp: ratio_bp(savings, income_cents),
     }
 }
 
@@ -309,12 +315,16 @@ pub fn build_categories(rows: Vec<CategoryAgg>) -> Vec<CategoryEntry> {
 pub struct BucketRow {
     pub bucket: Option<Bucket>,
     pub amount_cents: i64,
+    /// Parte de `amount_cents` que es dinero no gastado. Solo la fila de
+    /// ahorro puede tenerla; en las demás es 0.
+    pub unspent_cents: i64,
     pub target_cents: Option<i64>,
     pub income_share_bp: Option<i64>,
 }
 
 /// Siempre 4 filas: needs, wants, savings y gasto sin categoría (`bucket: null`).
-/// Objetivos con la misma regla de reparto que `/api/summary`.
+/// Objetivos y ahorro con las mismas reglas que `/api/summary`: la fila de
+/// ahorro suma lo gastado en el cubo `savings` y lo que no se gastó.
 pub fn build_buckets(categories: &[CategoryEntry], income_cents: i64) -> Vec<BucketRow> {
     let amount_of = |bucket: Option<Bucket>| -> i64 {
         categories
@@ -323,12 +333,20 @@ pub fn build_buckets(categories: &[CategoryEntry], income_cents: i64) -> Vec<Buc
             .map(|c| c.amount_cents)
             .sum()
     };
+    let expense_cents: i64 =
+        categories.iter().filter(|c| c.kind == Kind::Expense).map(|c| c.amount_cents).sum();
     let targets = (income_cents > 0).then(|| split_targets(income_cents));
     let row = |bucket: Option<Bucket>, target: Option<i64>| {
-        let amount_cents = amount_of(bucket);
+        let spent = amount_of(bucket);
+        let amount_cents = if bucket == Some(Bucket::Savings) {
+            savings_cents(income_cents, expense_cents, spent)
+        } else {
+            spent
+        };
         BucketRow {
             bucket,
             amount_cents,
+            unspent_cents: amount_cents - spent,
             target_cents: target.filter(|_| targets.is_some()),
             income_share_bp: ratio_bp(amount_cents, income_cents),
         }
@@ -717,10 +735,47 @@ mod tests {
 
     #[test]
     fn totals_savings_rate() {
-        let t = make_totals(250_000, 180_000, 42);
+        let t = make_totals(250_000, 180_000, 0, 42);
         assert_eq!((t.net_cents, t.savings_rate_bp), (70_000, Some(2_800)));
-        assert_eq!(make_totals(0, 500, 1).savings_rate_bp, None);
-        assert_eq!(make_totals(1_000, 1_500, 2).savings_rate_bp, Some(-5_000));
+        assert_eq!(make_totals(0, 500, 0, 1).savings_rate_bp, None);
+        // Gastar más de lo ingresado no da ahorro negativo: el sobrante tiene suelo 0.
+        assert_eq!(make_totals(1_000, 1_500, 0, 2).savings_rate_bp, Some(0));
+        // Lo invertido cuenta como ahorro aunque el neto sea negativo.
+        assert_eq!(make_totals(1_000, 1_500, 300, 2).savings_rate_bp, Some(3_000));
+    }
+
+    /// El caso que motivó el cambio: 2.000 de ingresos, 1.000 en necesidades,
+    /// 400 en deseos y 400 invertidos. Antes el informe decía 10 % (solo el
+    /// neto) mientras el resumen decía 30 %. Ahora tasa, cubo y resumen coinciden.
+    #[test]
+    fn savings_rate_matches_summary_and_bucket() {
+        let cats = build_categories(vec![
+            agg(Some("Nómina"), Kind::Income, None, 200_000, 1),
+            agg(Some("Alquiler"), Kind::Expense, Some(Bucket::Needs), 100_000, 1),
+            agg(Some("Ocio"), Kind::Expense, Some(Bucket::Wants), 40_000, 1),
+            agg(Some("Inversión"), Kind::Expense, Some(Bucket::Savings), 40_000, 1),
+        ]);
+        let t = make_totals(200_000, 180_000, 40_000, 4);
+        assert_eq!(t.savings_rate_bp, Some(3_000));
+
+        let b = build_buckets(&cats, 200_000);
+        assert_eq!(b[2].amount_cents, 60_000);
+        assert_eq!(b[2].unspent_cents, 20_000);
+        assert_eq!(b[2].income_share_bp, t.savings_rate_bp);
+
+        let s = crate::summary::calc::compute_summary(
+            "2026-09".into(),
+            200_000,
+            crate::summary::calc::BucketExpenses {
+                needs_cents: 100_000,
+                wants_cents: 40_000,
+                savings_cents: 40_000,
+            },
+            0,
+            vec![],
+        );
+        assert_eq!(s.buckets[2].actual_cents, b[2].amount_cents);
+        assert_eq!(s.buckets[2].actual_pct, 30.0);
     }
 
     // ---- categorías y cubos ----
@@ -765,14 +820,17 @@ mod tests {
         assert_eq!(b.len(), 4);
         assert_eq!(
             b[0],
-            BucketRow { bucket: Some(Bucket::Needs), amount_cents: 90_000, target_cents: Some(125_000), income_share_bp: Some(3_600) }
+            BucketRow { bucket: Some(Bucket::Needs), amount_cents: 90_000, unspent_cents: 0, target_cents: Some(125_000), income_share_bp: Some(3_600) }
         );
         assert_eq!(b[1].target_cents, Some(75_000));
-        assert_eq!(b[2].target_cents, Some(50_000));
-        assert_eq!(b[2].income_share_bp, Some(800));
+        // Ahorro: 200 invertidos + 700 sin gastar (2.500 - 1.800).
+        assert_eq!(
+            b[2],
+            BucketRow { bucket: Some(Bucket::Savings), amount_cents: 90_000, unspent_cents: 70_000, target_cents: Some(50_000), income_share_bp: Some(3_600) }
+        );
         assert_eq!(
             b[3],
-            BucketRow { bucket: None, amount_cents: 10_000, target_cents: None, income_share_bp: Some(400) }
+            BucketRow { bucket: None, amount_cents: 10_000, unspent_cents: 0, target_cents: None, income_share_bp: Some(400) }
         );
     }
 
@@ -781,6 +839,17 @@ mod tests {
         let b = build_buckets(&[], 0);
         assert_eq!(b.len(), 4);
         assert!(b.iter().all(|r| r.amount_cents == 0 && r.target_cents.is_none() && r.income_share_bp.is_none()));
+    }
+
+    #[test]
+    fn savings_bucket_has_no_unspent_part_when_overspending() {
+        let cats = build_categories(vec![
+            agg(Some("Nómina"), Kind::Income, None, 100_000, 1),
+            agg(Some("Alquiler"), Kind::Expense, Some(Bucket::Needs), 120_000, 1),
+            agg(Some("Inversión"), Kind::Expense, Some(Bucket::Savings), 10_000, 1),
+        ]);
+        let b = build_buckets(&cats, 100_000);
+        assert_eq!((b[2].amount_cents, b[2].unspent_cents), (10_000, 0));
     }
 
     #[test]
@@ -852,11 +921,16 @@ mod tests {
         let categories = build_categories(rows);
         let income: i64 = categories.iter().filter(|c| c.kind == Kind::Income).map(|c| c.amount_cents).sum();
         let expense: i64 = categories.iter().filter(|c| c.kind == Kind::Expense).map(|c| c.amount_cents).sum();
+        let savings: i64 = categories
+            .iter()
+            .filter(|c| c.kind == Kind::Expense && c.bucket == Some(Bucket::Savings))
+            .map(|c| c.amount_cents)
+            .sum();
         let count: i64 = categories.iter().map(|c| c.count).sum();
         Case {
             period: period_for(PeriodKind::Month, d(2026, 9, 10)),
-            totals: make_totals(income, expense, count),
-            previous: make_totals(income, expense, 5),
+            totals: make_totals(income, expense, savings, count),
+            previous: make_totals(income, expense, savings, 5),
             buckets: build_buckets(&categories, income),
             categories,
             largest: None,
@@ -874,7 +948,7 @@ mod tests {
     #[test]
     fn insights_empty_is_alone() {
         let mut c = case(vec![]);
-        c.previous = make_totals(10_000, 5_000, 3);
+        c.previous = make_totals(10_000, 5_000, 0, 3);
         let out = c.run();
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].code, "empty");
@@ -908,8 +982,19 @@ mod tests {
             agg(Some("X"), Kind::Expense, Some(Bucket::Needs), 8_000, 1),
         ]);
         assert_eq!(exact.find("savings_rate").unwrap().level, Level::Good);
-        exact.totals = make_totals(10_000, 8_001, 2);
+        exact.totals = make_totals(10_000, 8_001, 0, 2);
         assert_eq!(exact.find("savings_rate").unwrap().level, Level::Info);
+
+        // Lo invertido cuenta: 400 invertidos + 200 sin gastar sobre 2.000 = 30 %.
+        let invested = case(vec![
+            agg(Some("Nómina"), Kind::Income, None, 200_000, 1),
+            agg(Some("Alquiler"), Kind::Expense, Some(Bucket::Needs), 100_000, 1),
+            agg(Some("Ocio"), Kind::Expense, Some(Bucket::Wants), 40_000, 1),
+            agg(Some("Inversión"), Kind::Expense, Some(Bucket::Savings), 40_000, 1),
+        ]);
+        let i = invested.find("savings_rate").unwrap();
+        assert_eq!(i.level, Level::Good);
+        assert_eq!(i.message, "Has ahorrado el 30 % de tus ingresos (objetivo: 20 %).");
 
         // Ahorro 0 % (net == 0): se muestra como info.
         let zero = case(vec![
@@ -935,26 +1020,26 @@ mod tests {
     fn insights_expense_change_thresholds() {
         let mut c = case(base_rows()); // gasto actual 850 €
         // Anterior 0: se omite.
-        c.previous = make_totals(0, 0, 0);
+        c.previous = make_totals(0, 0, 0, 0);
         assert!(c.find("expense_change").is_none());
         // Anterior 700: +21 % -> warning.
-        c.previous = make_totals(0, 70_000, 1);
+        c.previous = make_totals(0, 70_000, 0, 1);
         let up = c.find("expense_change").unwrap();
         assert_eq!(up.level, Level::Warning);
         assert_eq!(up.message, "El gasto sube un 21 % respecto al periodo anterior (700,00 € → 850,00 €).");
         // Anterior 1.000: -15 % exacto -> good.
-        c.previous = make_totals(0, 100_000, 1);
+        c.previous = make_totals(0, 100_000, 0, 1);
         let down = c.find("expense_change").unwrap();
         assert_eq!(down.level, Level::Good);
         assert!(down.message.starts_with("El gasto baja un 15 %"));
         // Anterior 900: -5,6 % -> omitida. Anterior 739,13: +15 % justo.
-        c.previous = make_totals(0, 90_000, 1);
+        c.previous = make_totals(0, 90_000, 0, 1);
         assert!(c.find("expense_change").is_none());
-        c.previous = make_totals(0, 73_913, 1); // 85.000 / 73.913 = +15,0001 %
+        c.previous = make_totals(0, 73_913, 0, 1); // 85.000 / 73.913 = +15,0001 %
         assert_eq!(c.find("expense_change").unwrap().level, Level::Warning);
-        c.previous = make_totals(0, 73_914, 1); // +14,9999 % -> 1500 bp tras redondeo
+        c.previous = make_totals(0, 73_914, 0, 1); // +14,9999 % -> 1500 bp tras redondeo
         assert!(c.find("expense_change").is_some());
-        c.previous = make_totals(0, 74_000, 1); // +14,86 %
+        c.previous = make_totals(0, 74_000, 0, 1); // +14,86 %
         assert!(c.find("expense_change").is_none());
     }
 
@@ -1057,7 +1142,7 @@ mod tests {
             agg(Some("Vivienda"), Kind::Expense, Some(Bucket::Needs), 70_000, 1),
             agg(None, Kind::Expense, None, 10_000, 1),
         ]);
-        c.previous = make_totals(0, 40_000, 1);
+        c.previous = make_totals(0, 40_000, 0, 1);
         c.largest = Some(TopTransaction {
             id: Uuid::nil(),
             occurred_on: d(2026, 9, 3),

@@ -84,6 +84,14 @@ pub(crate) fn split_targets(income_cents: i64) -> (i64, i64, i64) {
     (needs, wants, savings)
 }
 
+/// Ahorro de un periodo: lo gastado en categorías del cubo `savings` más lo
+/// que no se gastó (`income - expense`, con suelo en 0). Es LA definición de
+/// ahorro de la app: la usan el resumen, la evolución y los informes, para que
+/// las tres pantallas den la misma cifra.
+pub(crate) fn savings_cents(income_cents: i64, expense_cents: i64, savings_expense_cents: i64) -> i64 {
+    savings_expense_cents + (income_cents - expense_cents).max(0)
+}
+
 fn target_cents(income_cents: i64, pct: i64) -> i64 {
     ((income_cents as i128 * pct as i128) / 100) as i64
 }
@@ -122,8 +130,7 @@ pub fn compute_summary(
 ) -> SummaryResponse {
     let expense_cents = bucket_expenses.categorized_total() + uncategorized_expense_cents;
     let (needs_target, wants_target, savings_target) = split_targets(income_cents);
-    let leftover = (income_cents - expense_cents).max(0);
-    let savings_actual = bucket_expenses.savings_cents + leftover;
+    let savings_actual = savings_cents(income_cents, expense_cents, bucket_expenses.savings_cents);
 
     let buckets = vec![
         bucket_summary(

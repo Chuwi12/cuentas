@@ -47,6 +47,8 @@ lo que sale, y la app calcula cómo se reparte tu dinero entre **necesidades (50
   con un 0 % de ahorro, y eso sería falso. En el mes en curso la app avisa de que esta cifra
   irá bajando hasta fin de mes.
 - Los gastos sin categoría no cuentan en ningún cubo, pero sí reducen el ahorro.
+- Informes usa la misma definición de ahorro: la tasa de ahorro, el cubo de ahorro y el resumen
+  dan la misma cifra para el mismo mes.
 - Todo el dinero se guarda como **enteros de céntimos**, nunca como decimales en coma flotante,
   para que no haya errores de redondeo.
 
@@ -88,9 +90,9 @@ alcance de JavaScript.
      movimiento.
    - La fuente separaba la coma decimal de las cifras ("2100 , 00 €").
 
-La prueba de punta a punta de la API está en [`scripts/e2e.py`](scripts/e2e.py): 95
+La prueba de punta a punta de la API está en [`scripts/e2e.py`](scripts/e2e.py): 103
 comprobaciones, con las cifras del 50/30/20 y de los informes calculadas a mano. El backend tiene
-además 88 tests unitarios.
+además 92 tests unitarios.
 
 ## Arrancar en local
 

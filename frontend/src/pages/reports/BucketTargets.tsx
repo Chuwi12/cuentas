@@ -3,14 +3,15 @@ import { formatCents, formatPct } from '../../lib/money'
 import { cx, RedPenNote } from '../../components/ui'
 import type { ReportBucketRow } from '../../lib/types'
 
-/** Gasto por cubo frente a su objetivo 50/30/20 sobre los ingresos del periodo. */
+/** Cada cubo frente a su objetivo 50/30/20 sobre los ingresos del periodo. El
+ *  ahorro incluye lo no gastado, como en el resumen. */
 export function BucketTargets({ rows }: { rows: ReportBucketRow[] }) {
   const noIncome = rows.every((r) => r.target_cents === null)
   return (
     <section>
       <h2 className="text-lg font-semibold mb-1">Reparto por cubos</h2>
       <p className="text-sm text-ink-soft mb-4">
-        {noIncome ? 'Sin ingresos en el periodo: no hay objetivo con el que comparar.' : 'Gasto frente al objetivo 50/30/20 sobre los ingresos.'}
+        {noIncome ? 'Sin ingresos en el periodo: no hay objetivo con el que comparar.' : 'Frente al objetivo 50/30/20 sobre los ingresos. El ahorro incluye lo invertido y lo que no gastaste.'}
       </p>
       <ul className="flex flex-col gap-4">
         {rows.map((r) => {
@@ -45,6 +46,7 @@ export function BucketTargets({ rows }: { rows: ReportBucketRow[] }) {
               ) : null}
               <p className="mt-1 text-sm text-ink-soft tabular">
                 {r.income_share_bp === null ? 'Sin ingresos con los que comparar' : `${formatPct(r.income_share_bp / 100)} de los ingresos`}
+                {r.unspent_cents > 0 ? ` · ${formatCents(r.unspent_cents)} sin gastar` : null}
                 {over ? <> {' · '}<RedPenNote className="text-base">Te has pasado {formatCents(r.amount_cents - (target as number))}</RedPenNote></> : null}
               </p>
             </li>

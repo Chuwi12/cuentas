@@ -146,14 +146,17 @@ fn too_many_rows() -> AppError {
 struct TotalsRow {
     cur_income: i64,
     cur_expense: i64,
+    cur_savings: i64,
     cur_count: i64,
     prev_income: i64,
     prev_expense: i64,
+    prev_savings: i64,
     prev_count: i64,
 }
 
 /// Periodo actual y anterior en una sola pasada: son contiguos, así que un
 /// único rango `[prev.from, cur.to]` los cubre y `FILTER` los separa.
+/// `*_savings` es el gasto en categorías del cubo `savings` (para la tasa de ahorro).
 async fn fetch_totals(
     db: &PgPool,
     user_id: Uuid,
@@ -162,14 +165,17 @@ async fn fetch_totals(
 ) -> AppResult<(Totals, Totals)> {
     let r = sqlx::query_as::<_, TotalsRow>(
         "SELECT \
-           COALESCE(SUM(amount_cents) FILTER (WHERE kind = 'income' AND occurred_on >= $3), 0)::BIGINT AS cur_income, \
-           COALESCE(SUM(amount_cents) FILTER (WHERE kind = 'expense' AND occurred_on >= $3), 0)::BIGINT AS cur_expense, \
-           (COUNT(*) FILTER (WHERE occurred_on >= $3))::BIGINT AS cur_count, \
-           COALESCE(SUM(amount_cents) FILTER (WHERE kind = 'income' AND occurred_on < $3), 0)::BIGINT AS prev_income, \
-           COALESCE(SUM(amount_cents) FILTER (WHERE kind = 'expense' AND occurred_on < $3), 0)::BIGINT AS prev_expense, \
-           (COUNT(*) FILTER (WHERE occurred_on < $3))::BIGINT AS prev_count \
-         FROM transactions \
-         WHERE user_id = $1 AND occurred_on >= $2 AND occurred_on <= $4",
+           COALESCE(SUM(t.amount_cents) FILTER (WHERE t.kind = 'income' AND t.occurred_on >= $3), 0)::BIGINT AS cur_income, \
+           COALESCE(SUM(t.amount_cents) FILTER (WHERE t.kind = 'expense' AND t.occurred_on >= $3), 0)::BIGINT AS cur_expense, \
+           COALESCE(SUM(t.amount_cents) FILTER (WHERE t.kind = 'expense' AND c.bucket = 'savings' AND t.occurred_on >= $3), 0)::BIGINT AS cur_savings, \
+           (COUNT(*) FILTER (WHERE t.occurred_on >= $3))::BIGINT AS cur_count, \
+           COALESCE(SUM(t.amount_cents) FILTER (WHERE t.kind = 'income' AND t.occurred_on < $3), 0)::BIGINT AS prev_income, \
+           COALESCE(SUM(t.amount_cents) FILTER (WHERE t.kind = 'expense' AND t.occurred_on < $3), 0)::BIGINT AS prev_expense, \
+           COALESCE(SUM(t.amount_cents) FILTER (WHERE t.kind = 'expense' AND c.bucket = 'savings' AND t.occurred_on < $3), 0)::BIGINT AS prev_savings, \
+           (COUNT(*) FILTER (WHERE t.occurred_on < $3))::BIGINT AS prev_count \
+         FROM transactions t \
+         LEFT JOIN categories c ON c.id = t.category_id AND c.user_id = $1 \
+         WHERE t.user_id = $1 AND t.occurred_on >= $2 AND t.occurred_on <= $4",
     )
     .bind(user_id)
     .bind(prev.from)
@@ -178,8 +184,8 @@ async fn fetch_totals(
     .fetch_one(db)
     .await?;
     Ok((
-        calc::make_totals(r.cur_income, r.cur_expense, r.cur_count),
-        calc::make_totals(r.prev_income, r.prev_expense, r.prev_count),
+        calc::make_totals(r.cur_income, r.cur_expense, r.cur_savings, r.cur_count),
+        calc::make_totals(r.prev_income, r.prev_expense, r.prev_savings, r.prev_count),
     ))
 }
 

@@ -1,7 +1,7 @@
 import { useSearchParams } from 'react-router-dom'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { api, keys, type ReportParams } from '../lib/api'
-import { formatPeriodLabel, periodRange, todayISO } from '../lib/dates'
+import { formatPeriodLabel, MIN_DATE, periodRange, todayISO } from '../lib/dates'
 import { EmptyState, ErrorNote, PageHeader, Skeleton } from '../components/ui'
 import type { ReportPeriodKind, ReportScope } from '../lib/types'
 import { PeriodControls } from './reports/PeriodControls'
@@ -26,7 +26,7 @@ function readParams(sp: URLSearchParams): ReportParams {
   return {
     period: k && KINDS.includes(k) ? k : 'month',
     scope: s && SCOPES.includes(s) ? s : 'all',
-    date: d && DATE_RE.test(d) && d >= '2000-01-01' && d <= today ? d : today,
+    date: d && DATE_RE.test(d) && d >= MIN_DATE && d <= today ? d : today,
   }
 }
 
