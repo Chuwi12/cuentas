@@ -55,6 +55,16 @@ for k,c,cat in [("expense",80000,"Alquiler"),("expense",30000,"Comida"),("expens
     s,b=tx(k,c,cat); check(f"alta gasto {cat}",s==201,(s,b))
 s,b=tx("expense",1000,"Nómina"); check("gasto con categoría de ingreso -> 422",s==422,(s,b))
 s,b=req("POST","/transactions",{"kind":"expense","amount_cents":0,"category_id":None,"occurred_on":D}); check("importe 0 -> 422",s==422,(s,b))
+MAXC=100_000_000_000
+s,b=req("POST","/transactions",{"kind":"expense","amount_cents":MAXC+1,"category_id":None,"occurred_on":D}); check("importe por encima del máximo -> 422",s==422 and "importe" in b["error"]["message"],(s,b))
+for day in ["1999-12-31","2101-01-01"]:
+    s,b=req("POST","/transactions",{"kind":"expense","amount_cents":100,"category_id":None,"occurred_on":day}); check(f"fecha {day} -> 422",s==422 and "fecha" in b["error"]["message"],(s,b))
+big=[tx("income",MAXC,"Nómina",day="2099-01-0"+str(i)) for i in (1,2)]
+check("dos importes máximos se aceptan",all(s==201 for s,_ in big),big)
+s,S99=req("GET","/summary?month=2099-01"); check("la suma de dos máximos no desborda el resumen",s==200 and S99["income_cents"]==2*MAXC,(s,S99))
+s,b=req("PATCH",f"/transactions/{big[0][1]['id']}",{"amount_cents":MAXC+1}); check("patch importe por encima del máximo -> 422",s==422,(s,b))
+s,b=req("PATCH",f"/transactions/{big[0][1]['id']}",{"occurred_on":"2101-01-01"}); check("patch fecha fuera de rango -> 422",s==422,(s,b))
+for _,b in big: req("DELETE",f"/transactions/{b['id']}")
 tx("expense",12345,"Comida",day=PREV+"-15")
 
 s,S=req("GET",f"/summary?month={M}"); bk={x["bucket"]:x for x in S["buckets"]}

@@ -10,7 +10,7 @@ use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
 use crate::auth::AuthUser;
-use crate::domain::{Bucket, Category, Kind};
+use crate::domain::{Bucket, Category, Kind, MAX_AMOUNT_CENTS, MAX_DATE, MIN_DATE};
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 
@@ -224,6 +224,20 @@ fn validate_amount(amount_cents: i64) -> AppResult<()> {
             "El importe debe ser mayor que 0".into(),
         ));
     }
+    if amount_cents > MAX_AMOUNT_CENTS {
+        return Err(AppError::Validation(
+            "El importe no puede superar 1.000.000.000,00 €".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_date(occurred_on: NaiveDate) -> AppResult<()> {
+    if !(MIN_DATE..=MAX_DATE).contains(&occurred_on) {
+        return Err(AppError::Validation(
+            "La fecha debe estar entre 2000-01-01 y 2100-12-31".into(),
+        ));
+    }
     Ok(())
 }
 
@@ -283,6 +297,7 @@ async fn create(
     Json(body): Json<CreateBody>,
 ) -> AppResult<(StatusCode, Json<Transaction>)> {
     validate_amount(body.amount_cents)?;
+    validate_date(body.occurred_on)?;
     let description = normalize_description(body.description)?;
     validate_category(state.db(), auth.id, body.category_id, body.kind).await?;
 
@@ -362,6 +377,7 @@ fn apply_patch(mut draft: TxDraft, patch: UpdateBody) -> AppResult<TxDraft> {
         draft.description = normalize_description(description)?;
     }
     validate_amount(draft.amount_cents)?;
+    validate_date(draft.occurred_on)?;
     Ok(draft)
 }
 
@@ -436,6 +452,39 @@ mod tests {
         assert!(validate_amount(1).is_ok());
         assert!(validate_amount(0).is_err());
         assert!(validate_amount(-100).is_err());
+        assert!(validate_amount(MAX_AMOUNT_CENTS).is_ok());
+        assert!(validate_amount(MAX_AMOUNT_CENTS + 1).is_err());
+        assert!(validate_amount(i64::MAX).is_err());
+    }
+
+    #[test]
+    fn validate_date_admits_only_the_supported_range() {
+        let d = |y, m, day| NaiveDate::from_ymd_opt(y, m, day).unwrap();
+        assert!(validate_date(d(2000, 1, 1)).is_ok());
+        assert!(validate_date(d(2100, 12, 31)).is_ok());
+        assert!(validate_date(d(1999, 12, 31)).is_err());
+        assert!(validate_date(d(2101, 1, 1)).is_err());
+        assert!(validate_date(d(1, 1, 1)).is_err());
+    }
+
+    #[test]
+    fn patch_rejects_out_of_range_amount_or_date() {
+        let mut patch = UpdateBody {
+            kind: None,
+            amount_cents: Some(MAX_AMOUNT_CENTS + 1),
+            category_id: None,
+            occurred_on: None,
+            description: None,
+        };
+        assert!(apply_patch(sample_draft(), patch).is_err());
+        patch = UpdateBody {
+            kind: None,
+            amount_cents: None,
+            category_id: None,
+            occurred_on: NaiveDate::from_ymd_opt(9999, 1, 1),
+            description: None,
+        };
+        assert!(apply_patch(sample_draft(), patch).is_err());
     }
 
     #[test]

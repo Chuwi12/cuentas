@@ -1,8 +1,8 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError, keys } from '../../lib/api'
-import { centsToInput, parseAmountToCents } from '../../lib/money'
-import { todayISO } from '../../lib/dates'
+import { centsToInput, formatCents, MAX_AMOUNT_CENTS, parseAmountToCents } from '../../lib/money'
+import { formatDateNumeric, MAX_DATE, MIN_DATE, todayISO } from '../../lib/dates'
 import { Button, Dialog, Field, Segmented, TextInput } from '../../components/ui'
 import { CategoryPicker } from './CategoryPicker'
 import type { Category, Kind, Transaction, TransactionInput } from '../../lib/types'
@@ -73,7 +73,11 @@ export function TransactionDialog({ mode, transaction, categories, onClose, onSa
     const cents = parseAmountToCents(amountText)
     const nextErrors: FieldErrors = {}
     if (cents === null) nextErrors.amount = 'Escribe un importe válido, por ejemplo 12,50'
+    else if (cents > MAX_AMOUNT_CENTS) nextErrors.amount = `El importe no puede superar ${formatCents(MAX_AMOUNT_CENTS)}`
     if (!occurredOn) nextErrors.date = 'Elige una fecha'
+    else if (occurredOn < MIN_DATE || occurredOn > MAX_DATE) {
+      nextErrors.date = `La fecha debe estar entre el ${formatDateNumeric(MIN_DATE)} y el ${formatDateNumeric(MAX_DATE)}`
+    }
     if (description.length > 500) nextErrors.description = 'La descripción no puede superar los 500 caracteres'
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors)
@@ -140,7 +144,9 @@ export function TransactionDialog({ mode, transaction, categories, onClose, onSa
         </>
       }
     >
-      <form id={formId} className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); void handleSubmit(false) }}>
+      {/* noValidate: la validación es la de handleSubmit, con mensajes propios. Sin él, el
+          min/max de la fecha bloquearía Enter con el globo nativo del navegador. */}
+      <form id={formId} noValidate className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); void handleSubmit(false) }}>
         {errors.general ? (
           <p role="alert" className="text-sm text-over">{errors.general}</p>
         ) : null}
@@ -169,7 +175,7 @@ export function TransactionDialog({ mode, transaction, categories, onClose, onSa
 
         <Field label="Fecha" error={errors.date}>
           {(props) => (
-            <TextInput {...props} type="date" value={occurredOn} onChange={(e) => setOccurredOn(e.target.value)} />
+            <TextInput {...props} type="date" min={MIN_DATE} max={MAX_DATE} value={occurredOn} onChange={(e) => setOccurredOn(e.target.value)} />
           )}
         </Field>
 

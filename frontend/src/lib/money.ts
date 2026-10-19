@@ -5,6 +5,9 @@ const eurRound = new Intl.NumberFormat('es-ES', {
   style: 'currency', currency: 'EUR', maximumFractionDigits: 0,
 })
 
+/** Importe máximo de un movimiento que admite el backend: 1.000 millones de euros. */
+export const MAX_AMOUNT_CENTS = 100_000_000_000
+
 /** 123456 → "1234,56 €" */
 export function formatCents(cents: number): string {
   return eur.format(cents / 100)

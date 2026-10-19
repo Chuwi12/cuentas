@@ -75,8 +75,10 @@ tabla `users` está vacía (app de un solo usuario).
 | PATCH  | `/:id` | cualquier subconjunto de lo anterior | `200 Transaction` |
 | DELETE | `/:id` | — | `204` |
 
-Validación: `amount_cents > 0`; el `kind` de la transacción debe coincidir con el
-`kind` de la categoría referenciada; `per_page` máximo 200.
+Validación: `0 < amount_cents <= 100000000000` (1.000 millones de euros, un tope de cordura
+para que ninguna suma desborde); `occurred_on` entre `2000-01-01` y `2100-12-31` (el mismo rango
+que aceptan los informes); el `kind` de la transacción debe coincidir con el `kind` de la
+categoría referenciada; `per_page` máximo 200. Los dos límites también son CHECK en la BD.
 
 ### Resumen 50/30/20 — `/api/summary`
 

@@ -1,6 +1,18 @@
+use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
+
+/// Importe máximo de un movimiento: 1.000 millones de euros. No es un límite
+/// de negocio sino de cordura: con él, ninguna suma de un periodo puede
+/// desbordar un `BIGINT` (haría falta del orden de 10⁸ movimientos). Coincide
+/// con el CHECK de la migración 0002.
+pub const MAX_AMOUNT_CENTS: i64 = 100_000_000_000;
+
+/// Rango de fechas admitido, tanto para los movimientos como para los
+/// informes. Coincide con el CHECK de la migración 0002.
+pub const MIN_DATE: NaiveDate = NaiveDate::from_ymd_opt(2000, 1, 1).unwrap();
+pub const MAX_DATE: NaiveDate = NaiveDate::from_ymd_opt(2100, 12, 31).unwrap();
 
 /// Ingreso o gasto.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
