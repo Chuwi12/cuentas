@@ -35,22 +35,30 @@ async fn summary(
         Some(s) => calc::parse_month(&s)?,
         None => calc::ymd_to_month(Local::now().date_naive()),
     };
+    Ok(Json(build_summary(state.db(), user.id, year, month).await?))
+}
+
+/// Resumen de un mes. Lo comparten el endpoint y los datos que recibe el asesor.
+pub(crate) async fn build_summary(
+    db: &PgPool,
+    user_id: Uuid,
+    year: i32,
+    month: u32,
+) -> AppResult<SummaryResponse> {
     let (from, to) = calc::month_range(year, month);
 
-    let income_cents = fetch_income_cents(state.db(), user.id, from, to).await?;
-    let bucket_expenses = fetch_bucket_expenses(state.db(), user.id, from, to).await?;
-    let uncategorized_expense_cents =
-        fetch_uncategorized_expense_cents(state.db(), user.id, from, to).await?;
-    let category_expenses = fetch_category_expenses(state.db(), user.id, from, to).await?;
+    let income_cents = fetch_income_cents(db, user_id, from, to).await?;
+    let bucket_expenses = fetch_bucket_expenses(db, user_id, from, to).await?;
+    let uncategorized_expense_cents = fetch_uncategorized_expense_cents(db, user_id, from, to).await?;
+    let category_expenses = fetch_category_expenses(db, user_id, from, to).await?;
 
-    let body = calc::compute_summary(
+    Ok(calc::compute_summary(
         calc::format_month(year, month),
         income_cents,
         bucket_expenses,
         uncategorized_expense_cents,
         category_expenses,
-    );
-    Ok(Json(body))
+    ))
 }
 
 #[derive(Debug, Deserialize)]
@@ -79,10 +87,21 @@ async fn trend(
     };
 
     let (cur_year, cur_month) = calc::ymd_to_month(Local::now().date_naive());
-    let end = calc::month_start_n_back(cur_year, cur_month, 0);
-    let start = calc::month_start_n_back(cur_year, cur_month, months - 1);
+    Ok(Json(build_trend(state.db(), user.id, cur_year, cur_month, months).await?))
+}
 
-    let rows = fetch_trend_rows(state.db(), user.id, start, end).await?;
+/// Evolución de los `months` (>= 1) meses que terminan en `(end_year, end_month)`.
+pub(crate) async fn build_trend(
+    db: &PgPool,
+    user_id: Uuid,
+    end_year: i32,
+    end_month: u32,
+    months: u32,
+) -> AppResult<TrendResponse> {
+    let end = calc::month_start_n_back(end_year, end_month, 0);
+    let start = calc::month_start_n_back(end_year, end_month, months - 1);
+
+    let rows = fetch_trend_rows(db, user_id, start, end).await?;
 
     let points = rows
         .into_iter()
@@ -101,7 +120,7 @@ async fn trend(
         })
         .collect();
 
-    Ok(Json(TrendResponse { points }))
+    Ok(TrendResponse { points })
 }
 
 // ---- Consultas ----

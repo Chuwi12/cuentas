@@ -18,6 +18,9 @@ pub enum AppError {
     Conflict(String),
     #[error("no encontrado")]
     NotFound,
+    /// El asesor (o Ollama detrás) no responde, o no está configurado.
+    #[error("{0}")]
+    AsesorUnavailable(String),
     #[error(transparent)]
     Database(#[from] sqlx::Error),
     #[error("{0}")]
@@ -38,6 +41,7 @@ impl AppError {
             Validation(m) => (StatusCode::UNPROCESSABLE_ENTITY, "validation", m.clone()),
             Conflict(m) => (StatusCode::CONFLICT, "conflict", m.clone()),
             NotFound => (StatusCode::NOT_FOUND, "not_found", self.to_string()),
+            AsesorUnavailable(m) => (StatusCode::SERVICE_UNAVAILABLE, "asesor_unavailable", m.clone()),
             Database(sqlx::Error::RowNotFound) => {
                 (StatusCode::NOT_FOUND, "not_found", "No encontrado".into())
             }

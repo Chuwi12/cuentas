@@ -58,17 +58,24 @@ async fn report(
     user: AuthUser,
     Query(q): Query<ReportQuery>,
 ) -> AppResult<Json<ReportResponse>> {
-    let Params { period, scope } = params(&q)?;
+    Ok(Json(build_report(state.db(), user.id, params(&q)?).await?))
+}
+
+/// Informe de un periodo. Lo comparten el endpoint y los datos que recibe el asesor.
+pub(crate) async fn build_report(
+    db: &PgPool,
+    user_id: Uuid,
+    Params { period, scope }: Params,
+) -> AppResult<ReportResponse> {
     let previous = calc::previous_period(&period);
-    let db = state.db();
 
     let (totals_pair, series, category_rows, top, largest) = tokio::try_join!(
-        fetch_totals(db, user.id, &period, &previous),
-        fetch_series(db, user.id, &period),
-        fetch_categories(db, user.id, &period),
-        fetch_top(db, user.id, &period, scope.kind_filter(), TOP_TRANSACTIONS),
+        fetch_totals(db, user_id, &period, &previous),
+        fetch_series(db, user_id, &period),
+        fetch_categories(db, user_id, &period),
+        fetch_top(db, user_id, &period, scope.kind_filter(), TOP_TRANSACTIONS),
         // El mayor gasto individual alimenta un insight aunque scope sea `income`.
-        fetch_top(db, user.id, &period, Some(Kind::Expense), 1),
+        fetch_top(db, user_id, &period, Some(Kind::Expense), 1),
     )?;
     let (totals, previous_totals) = totals_pair;
 
@@ -83,7 +90,7 @@ async fn report(
         largest_expense: largest.first(),
     });
 
-    Ok(Json(ReportResponse {
+    Ok(ReportResponse {
         period,
         scope,
         totals,
@@ -93,7 +100,7 @@ async fn report(
         buckets,
         top_transactions: top,
         insights,
-    }))
+    })
 }
 
 async fn export_csv(
