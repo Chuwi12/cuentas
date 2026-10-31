@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Arranca backend (Rust) y frontend (Vite) juntos, en primer plano.
-# Ctrl+C para los dos. La BD es un servicio aparte (./scripts/db.sh) y no se toca aquí.
+# Arranca backend (Rust) y frontend (Vite) juntos, en primer plano, y el asesor si
+# ASESOR_TOKEN está en .env. Ctrl+C para todos. Las BD son servicios aparte (./scripts/db.sh).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -15,6 +15,13 @@ fi
 set -a; . ./.env; set +a
 API_ADDR="${BIND_ADDR:-127.0.0.1:8080}"
 
+ASESOR_ON=0
+if [ -n "${ASESOR_TOKEN:-}" ]; then
+  ASESOR_ON=1
+  [ -d asesor/node_modules ] || (cd asesor && npm ci)
+  ./scripts/db.sh asesor up
+fi
+
 # Cada proceso va en su propio grupo (setsid) para poder pararlo entero, incluido el binario
 # que lanza cargo, y no depender de a quién llegue el Ctrl+C del terminal.
 start() { # nombre directorio comando...
@@ -22,19 +29,19 @@ start() { # nombre directorio comando...
   setsid bash -c 'set -o pipefail; cd "$1"; n=$2; shift 2; "$@" 2>&1 | sed -u "s/^/[$n] /"' _ "$dir" "$name" "$@" &
 }
 
-API=; WEB=; STOPPING=0
+API=; WEB=; AI=; STOPPING=0
 stop_all() {
   [ "$STOPPING" = 1 ] && return; STOPPING=1
   trap '' INT TERM
-  local pid i
-  for pid in $API $WEB; do kill -TERM -- "-$pid" 2>/dev/null || true; done
-  for i in $(seq 1 100); do   # hasta 10 s
-    for pid in $API $WEB; do
-      kill -0 -- "-$pid" 2>/dev/null && continue 2
+  local pid
+  for pid in $API $WEB $AI; do kill -TERM -- "-$pid" 2>/dev/null || true; done
+  for _ in $(seq 1 100); do   # hasta 10 s
+    for pid in $API $WEB $AI; do
+      kill -0 -- "-$pid" 2>/dev/null && { sleep 0.1; continue 2; }
     done
     break
   done
-  for pid in $API $WEB; do kill -KILL -- "-$pid" 2>/dev/null || true; done
+  for pid in $API $WEB $AI; do kill -KILL -- "-$pid" 2>/dev/null || true; done
   wait 2>/dev/null || true
 }
 trap 'stop_all; exit 130' INT
@@ -45,20 +52,24 @@ start api backend cargo run
 API=$!
 start web frontend npx vite
 WEB=$!
+if [ "$ASESOR_ON" = 1 ]; then
+  start asesor asesor npm start
+  AI=$!
+fi
 
 printf 'esperando al backend'
 for _ in $(seq 1 300); do
   if curl -fs "http://$API_ADDR/api/health" >/dev/null 2>&1; then
     echo " · listo"; echo "abre http://localhost:5173 (api en http://$API_ADDR)"; break
   fi
-  kill -0 "$API" 2>/dev/null && kill -0 "$WEB" 2>/dev/null || break
+  for pid in $API $WEB $AI; do kill -0 "$pid" 2>/dev/null || break 2; done
   printf '.'; sleep 1
 done
 echo
 
-# Si cualquiera de los dos termina, se para el otro y se sale con error.
+# Si cualquiera termina, se paran los demás y se sale con error.
 rc=0
-wait -n "$API" "$WEB" || rc=$?
-echo "uno de los procesos terminó (código $rc); parando el otro" >&2
+wait -n $API $WEB $AI || rc=$?
+echo "uno de los procesos terminó (código $rc); parando los demás" >&2
 stop_all
 exit $(( rc == 0 ? 1 : rc ))
