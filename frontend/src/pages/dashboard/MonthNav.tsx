@@ -11,7 +11,7 @@ export function MonthNav({ month, onChange }: { month: string; onChange: (month:
         type="button"
         aria-label="Mes anterior"
         onClick={() => onChange(shiftMonth(month, -1))}
-        className="p-2 rounded-[var(--radius-control)] text-ink-soft hover:text-ink hover:bg-rule transition-colors"
+        className="p-2 rounded-[var(--radius-control)] text-ink-soft hover:text-ink hover:bg-rule transition-colors disabled:opacity-30 disabled:pointer-events-none"
       >
         <ChevronLeft size={20} aria-hidden />
       </button>

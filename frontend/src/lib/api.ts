@@ -1,6 +1,6 @@
 import type {
-  Category, CategoryInput, MonthSummary, Page, Report, ReportPeriodKind, ReportScope,
-  Transaction, TransactionInput, TrendPoint, User,
+  Analisis, AsesorEvent, Category, CategoryInput, Memoria, MonthSummary, Page, Report, ReportPeriodKind,
+  ReportScope, Transaction, TransactionInput, TrendPoint, User,
 } from './types'
 
 /** Error del backend con el `code` del contrato (`validation`, `conflict`…). */
@@ -14,28 +14,79 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  let res: Response
+async function send(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<Response> {
   try {
-    res = await fetch(`/api${path}`, {
+    return await fetch(`/api${path}`, {
       method,
       credentials: 'same-origin',
       headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
+      signal,
     })
-  } catch {
+  } catch (e) {
+    if (signal?.aborted) throw e // abortar a propósito no es un fallo de red
     throw new ApiError(0, 'network', 'No hay conexión con el servidor. Comprueba que el backend está arrancado.')
   }
-  if (res.status === 204) return undefined as T
+}
+
+/** Respuesta con status ≠ 2xx y cuerpo `{error:{code,message}}` → ApiError. */
+async function toApiError(res: Response): Promise<ApiError> {
   const data = await res.json().catch(() => null)
-  if (!res.ok) {
-    throw new ApiError(
-      res.status,
-      data?.error?.code ?? 'internal',
-      data?.error?.message ?? `Error ${res.status}`,
-    )
+  return new ApiError(res.status, data?.error?.code ?? 'internal', data?.error?.message ?? `Error ${res.status}`)
+}
+
+async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const res = await send(method, path, body)
+  if (res.status === 204) return undefined as T
+  if (!res.ok) throw await toApiError(res)
+  return (await res.json().catch(() => null)) as T
+}
+
+/** POST cuya respuesta es NDJSON (una línea JSON por evento). Llama a `onEvent` según llegan y
+ *  resuelve cuando el servidor cierra el stream; que el stream acabe sin evento final lo decide
+ *  quien llama. Un status ≠ 200 antes del stream es un ApiError, como en `request`. Abortar con
+ *  `signal` rechaza con el AbortError del navegador. */
+export async function streamNdjson<E>(
+  path: string, body: unknown, onEvent: (event: E) => void, signal?: AbortSignal,
+): Promise<void> {
+  const res = await send('POST', path, body, signal)
+  if (!res.ok) throw await toApiError(res)
+  if (!res.body) throw new ApiError(0, 'stream', 'Este navegador no admite respuestas en streaming.')
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  const read = async () => {
+    try {
+      return await reader.read()
+    } catch (e) {
+      if (signal?.aborted) throw e
+      throw new ApiError(0, 'network', 'La conexión con el asesor se cortó antes de terminar.')
+    }
   }
-  return data as T
+  const emit = (line: string) => {
+    if (!line.trim()) return
+    let event: E
+    try {
+      event = JSON.parse(line) as E
+    } catch {
+      void reader.cancel() // si no, el servidor seguiría generando para nadie y el reintento daría 409
+      throw new ApiError(0, 'stream', 'El asesor ha enviado una respuesta que no se puede leer.')
+    }
+    onEvent(event)
+  }
+
+  let buffer = ''
+  for (;;) {
+    const { done, value } = await read()
+    buffer += decoder.decode(value, { stream: !done })
+    // Una línea puede llegar partida entre trozos: solo se emite lo que ya tiene su salto.
+    for (let nl = buffer.indexOf('\n'); nl >= 0; nl = buffer.indexOf('\n')) {
+      emit(buffer.slice(0, nl))
+      buffer = buffer.slice(nl + 1)
+    }
+    if (done) break
+  }
+  emit(buffer) // última línea sin salto final
 }
 
 function qs(params: Record<string, string | number | boolean | null | undefined>): string {
@@ -105,6 +156,16 @@ export const api = {
   reports: {
     get: (p: ReportParams) => request<Report>('GET', `/reports${qs({ ...p })}`),
   },
+  asesor: {
+    /** 404 `not_found` si el mes aún no tiene análisis. */
+    analisis: (month: string) => request<Analisis>('GET', `/asesor/analisis${qs({ month })}`),
+    generar: (month: string, onEvent: (e: AsesorEvent) => void, signal: AbortSignal) =>
+      streamNdjson<AsesorEvent>('/asesor/analisis', { month }, onEvent, signal),
+    preguntar: (question: string, month: string, onEvent: (e: AsesorEvent) => void, signal: AbortSignal) =>
+      streamNdjson<AsesorEvent>('/asesor/preguntas', { question, month }, onEvent, signal),
+    memorias: () => request<Memoria[]>('GET', '/asesor/memorias'),
+    borrarMemoria: (id: string) => request<void>('DELETE', `/asesor/memorias/${id}`),
+  },
 }
 
 /** Claves de react-query. Tras crear/editar/borrar movimientos o categorías,
@@ -117,4 +178,8 @@ export const keys = {
   summary: (month: string) => ['finanzas', 'summary', month] as const,
   trend: (months: number) => ['finanzas', 'trend', months] as const,
   report: (p: ReportParams) => ['finanzas', 'report', p.period, p.date, p.scope] as const,
+  /** Prefijo de todo lo del asesor: invalidarlo refresca análisis y memoria. */
+  asesor: ['finanzas', 'asesor'] as const,
+  analisis: (month: string) => ['finanzas', 'asesor', 'analisis', month] as const,
+  memorias: ['finanzas', 'asesor', 'memorias'] as const,
 }

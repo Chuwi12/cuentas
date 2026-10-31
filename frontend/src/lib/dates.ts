@@ -120,3 +120,12 @@ export function formatDateNumeric(iso: string): string {
   const [y, m, d] = iso.split('-')
   return `${d}/${m}/${y}`
 }
+
+const timestampFmt = new Intl.DateTimeFormat('es-ES', {
+  day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+})
+
+/** RFC3339 → "3 oct 2026, 14:32" (hora local). */
+export function formatTimestamp(iso: string): string {
+  return timestampFmt.format(new Date(iso)).replace(/\./g, '')
+}
