@@ -5,7 +5,7 @@
  */
 import {
   forwardRef, useEffect, useId, useRef,
-  type AnchorHTMLAttributes, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes,
+  type AnchorHTMLAttributes, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes,
 } from 'react'
 import { X } from 'lucide-react'
 import { Link, type LinkProps } from 'react-router-dom'
@@ -69,10 +69,12 @@ export function AnchorButton({ variant = 'primary', size = 'md', className, ...r
 }
 
 // ── Campos de formulario ────────────────────────────────────────────────
-const control =
-  'w-full h-10 px-3 bg-sheet border border-grid rounded-[var(--radius-control)] text-ink ' +
-  'placeholder:text-ink-faint focus:outline-none focus:border-needs focus:ring-2 focus:ring-needs/20 ' +
+const controlBase =
+  'w-full px-3 bg-sheet border border-grid rounded-[var(--radius-control)] text-ink ' +
+  'focus:outline-none focus:border-needs focus:ring-2 focus:ring-needs/20 ' +
   'aria-[invalid=true]:border-over'
+// El placeholder en ink-faint (3,2:1) no llega a AA: el TextArea nuevo usa ink-soft; inputs y select, sin tocar.
+const control = cx('h-10 placeholder:text-ink-faint', controlBase)
 
 /** Etiqueta + control + pista/error, con ids enlazados para lectores de pantalla. */
 export function Field({ label, error, hint, children }: {
@@ -94,6 +96,12 @@ export function Field({ label, error, hint, children }: {
 export const TextInput = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
   function TextInput({ className, ...rest }, ref) {
     return <input ref={ref} className={cx(control, className)} {...rest} />
+  },
+)
+
+export const TextArea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(
+  function TextArea({ className, ...rest }, ref) {
+    return <textarea ref={ref} className={cx(controlBase, 'py-2 min-h-24 resize-y placeholder:text-ink-soft', className)} {...rest} />
   },
 )
 

@@ -10,6 +10,8 @@ import CategoriesPage from './pages/CategoriesPage'
 
 // Informes es la página más pesada y la menos visitada: va en su propio chunk.
 const ReportsPage = lazy(() => import('./pages/ReportsPage'))
+// El asesor solo se usa de vez en cuando: también va aparte.
+const AsesorPage = lazy(() => import('./pages/AsesorPage'))
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { user, isLoading, error } = useSession()
@@ -29,6 +31,7 @@ export default function App() {
         <Route path="movimientos" element={<TransactionsPage />} />
         <Route path="categorias" element={<CategoriesPage />} />
         <Route path="informes" element={<Suspense fallback={<div aria-busy="true" />}><ReportsPage /></Suspense>} />
+        <Route path="asesor" element={<Suspense fallback={<div aria-busy="true" />}><AsesorPage /></Suspense>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

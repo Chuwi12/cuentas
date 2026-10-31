@@ -159,3 +159,29 @@ export interface Report {
   top_transactions: ReportTopTransaction[]
   insights: ReportInsight[]
 }
+
+// ── Asesor (docs/ASESOR.md, API pública) ────────────────────────────────
+export interface Analisis {
+  /** YYYY-MM */
+  month: string
+  content: string
+  /** Modelo que lo generó. */
+  model: string
+  created_at: string
+}
+
+export interface Memoria {
+  id: string
+  tipo: 'analisis' | 'conversacion'
+  /** YYYY-MM; null en conversaciones sin mes. */
+  month: string | null
+  content: string
+  created_at: string
+}
+
+/** Línea del stream NDJSON de /asesor/analisis y /asesor/preguntas.
+ *  `done` lleva `analisis` solo en /asesor/analisis. */
+export type AsesorEvent =
+  | { type: 'delta'; text: string }
+  | { type: 'done'; analisis?: Analisis }
+  | { type: 'error'; message: string }

@@ -27,6 +27,11 @@ lo que sale, y la app calcula cómo se reparte tu dinero entre **necesidades (50
   única, y después el registro se cierra.
 - **Adaptada a móvil.** Barra de navegación inferior, alta de movimientos a un toque y filtros
   plegables.
+- **Asesor con IA local (opcional).** Un LLM que corre en tu máquina con Ollama analiza cada mes,
+  responde preguntas sobre tus datos y recuerda sus consejos para comprobar después si funcionaron.
+  Las cifras las calcula siempre la app, nunca el modelo, y ningún dato sale de tu equipo. Está
+  hecho con LangChain.js y guarda su memoria en Postgres con pgvector. Detalles en
+  [`docs/ASESOR.md`](docs/ASESOR.md).
 
 | Movimientos | Añadir un movimiento | Categorías |
 |---|---|---|
@@ -96,7 +101,8 @@ además 92 tests unitarios.
 
 ## Arrancar en local
 
-Requisitos: Rust ≥ 1.94, Node ≥ 20 y podman.
+Requisitos: Rust ≥ 1.94, Node ≥ 20 y podman. Para el asesor, además Node ≥ 24.2 y
+[Ollama](https://ollama.com) con `qwen3.5:4b` y `embeddinggemma:300m-qat-q8_0`.
 
 ```bash
 cp .env.example .env
@@ -104,6 +110,9 @@ openssl rand -base64 48     # pega el resultado en JWT_SECRET dentro de .env
 ./scripts/db.sh install     # una sola vez: registra la BD como servicio de usuario (systemd)
 ./scripts/dev.sh            # asegura la BD y arranca backend (:8080) + frontend (:5173)
 ```
+
+Para activar el asesor: `./scripts/db.sh asesor install` una vez, y en `.env` pon un
+`ASESOR_TOKEN` (`openssl rand -base64 48`); `dev.sh` arrancará también su BD y el servicio.
 
 Abre http://localhost:5173 y crea tu cuenta. Ctrl+C para backend y frontend a la vez; la BD
 sigue en marcha y se para con `./scripts/db.sh down` (o sola, en orden, al apagar el equipo).
@@ -115,7 +124,8 @@ termine antes de desmontar el almacenamiento del contenedor.
 
 | Comando | Qué hace |
 |---|---|
-| `./scripts/db.sh {install\|uninstall\|up\|down\|status\|logs\|psql\|reset}` | Gestiona la BD de desarrollo |
+| `./scripts/db.sh [asesor] {install\|uninstall\|up\|down\|status\|logs\|psql\|reset}` | Gestiona la BD de desarrollo (con `asesor`, la del asesor) |
+| `cd asesor && npm test && npm run check` | Tests y tipos del asesor |
 | `cd backend && cargo test` | Tests unitarios del backend |
 | `python3 scripts/e2e.py` | Prueba de punta a punta (solo sobre una BD **sin** usuario) |
 | `cd frontend && npx tsc -b && npx oxlint src` | Tipos y lint del frontend |
@@ -138,7 +148,9 @@ backend/
   src/categories/    CRUD de categorías
   src/transactions/  CRUD de movimientos con filtros y paginación
   src/summary/       cálculo 50/30/20 (lógica pura en calc.rs, con tests) y consultas
+  src/asesor/        API del asesor: datos exactos y proxy al servicio
   migrations/        esquema SQL
+asesor/              servicio del asesor: Node + LangChain.js + Ollama + pgvector
 frontend/
   src/pages/         una carpeta por pantalla
   src/components/    primitivas de UI compartidas

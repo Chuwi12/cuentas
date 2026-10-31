@@ -16,5 +16,26 @@ services:
       timeout: 3s
       retries: 10
 
+  # Memoria del asesor (pgvector): otra instancia que convive con la de finanzas.
+  asesor-db:
+    image: docker.io/pgvector/pgvector:pg18
+    container_name: finanzas-asesor-db
+    profiles: ["asesor"]   # opcional, como el asesor: compose --profile asesor up
+    command: ["postgres", "-c", "shared_buffers=32MB", "-c", "max_connections=20"]
+    environment:
+      POSTGRES_USER: asesor
+      POSTGRES_PASSWORD: asesor_dev
+      POSTGRES_DB: asesor
+    ports:
+      - "127.0.0.1:5435:5432"
+    volumes:
+      - finanzas-asesor-pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U asesor -d asesor"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
 volumes:
   finanzas-pgdata:
+  finanzas-asesor-pgdata:

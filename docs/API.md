@@ -13,7 +13,9 @@ Base URL en dev: `/api` (proxy de Vite hacia `http://127.0.0.1:8080`).
 - Auth: cookie `auth_token` (`httpOnly`, `SameSite=Lax`, `Path=/`). No hay header Bearer.
 - Errores: siempre `{"error": {"code": "<slug>", "message": "<texto en español>"}}`
   con el status HTTP adecuado. Códigos: `unauthorized`, `forbidden`, `not_found`,
-  `validation`, `conflict`, `registration_closed`, `invalid_credentials`, `internal`.
+  `validation`, `conflict`, `registration_closed`, `invalid_credentials`, `internal` y
+  `asesor_unavailable` (503, el asesor con LLM no responde).
+- El asesor (`/api/asesor/*`) tiene su propio contrato en [`ASESOR.md`](ASESOR.md).
 
 ## Enums
 

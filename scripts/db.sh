@@ -2,16 +2,32 @@
 # Gestión del PostgreSQL de desarrollo en un contenedor rootless de podman.
 # Si el servicio Quadlet está instalado (./scripts/db.sh install) lo gestiona systemd,
 # que lo para con SIGINT antes de desmontar nada al apagar. Si no, usa podman a pelo.
-# Uso: ./scripts/db.sh {install|uninstall|up|down|logs|psql|reset|status}
+# Uso: ./scripts/db.sh [asesor] {install|uninstall|up|down|logs|psql|reset|status}
+# Con "asesor" delante actúa sobre la BD del asesor (pgvector), que convive con la de finanzas.
 set -euo pipefail
 
-NAME=finanzas-db
-IMAGE=docker.io/library/postgres:18-alpine
-VOLUME=finanzas-pgdata
-PORT=5433
-DB=finanzas
-PGUSER=finanzas
-PASS=finanzas_dev
+if [ "${1:-}" = asesor ]; then
+  shift
+  NAME=finanzas-asesor-db
+  IMAGE=docker.io/pgvector/pgvector:pg18
+  VOLUME=finanzas-asesor-pgdata
+  PORT=5435
+  DB=asesor
+  PGUSER=asesor
+  PASS=asesor_dev
+  EXTRA_ARGS=(postgres -c shared_buffers=32MB -c max_connections=20)
+  CMD="./scripts/db.sh asesor"
+else
+  NAME=finanzas-db
+  IMAGE=docker.io/library/postgres:18-alpine
+  VOLUME=finanzas-pgdata
+  PORT=5433
+  DB=finanzas
+  PGUSER=finanzas
+  PASS=finanzas_dev
+  EXTRA_ARGS=()
+  CMD="./scripts/db.sh"
+fi
 SERVICE=$NAME.service
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -41,7 +57,7 @@ wait_ready() {
     fi
     printf '.'; sleep 1
   done
-  echo; echo "postgres no respondió a tiempo; revisa: ./scripts/db.sh logs" >&2; return 1
+  echo; echo "postgres no respondió a tiempo; revisa: $CMD logs" >&2; return 1
 }
 
 case "${1:-up}" in
@@ -59,7 +75,7 @@ case "${1:-up}" in
     mkdir -p "$UNIT_DIR"
     cp "$UNIT_SRC" "$UNIT_DST"
     systemctl --user daemon-reload
-    echo "servicio $SERVICE instalado. Arráncalo con: ./scripts/db.sh up"
+    echo "servicio $SERVICE instalado. Arráncalo con: $CMD up"
     ;;
   uninstall)
     if systemctl --user is-active --quiet "$SERVICE"; then
@@ -75,7 +91,7 @@ case "${1:-up}" in
       echo "servicio $SERVICE arrancado"
     elif podman container exists "$NAME"; then
       podman start "$NAME" >/dev/null
-      echo "contenedor $NAME arrancado (ya existía; para gestionarlo con systemd: ./scripts/db.sh install)"
+      echo "contenedor $NAME arrancado (ya existía; para gestionarlo con systemd: $CMD install)"
     else
       podman volume exists "$VOLUME" || podman volume create "$VOLUME" >/dev/null
       podman run -d --name "$NAME" \
@@ -85,7 +101,7 @@ case "${1:-up}" in
         --health-cmd "pg_isready -U $PGUSER -d $DB" \
         --health-interval 5s --health-retries 10 \
         --stop-timeout 60 \
-        "$IMAGE" >/dev/null
+        "$IMAGE" "${EXTRA_ARGS[@]}" >/dev/null
       echo "contenedor $NAME creado"
     fi
     wait_ready
@@ -97,13 +113,13 @@ case "${1:-up}" in
       # El servicio hace `podman rm`, así que no queda código de salida que consultar:
       # un apagado fallido se vería como fallo del servicio.
       if systemctl --user is-failed --quiet "$SERVICE"; then
-        echo "el servicio terminó con error; revisa: ./scripts/db.sh logs" >&2; exit 1
+        echo "el servicio terminó con error; revisa: $CMD logs" >&2; exit 1
       fi
     elif podman container exists "$NAME"; then
       podman stop -t 60 "$NAME" >/dev/null
       wait_stopped
       code=$(podman container inspect -f '{{.State.ExitCode}}' "$NAME")
-      [ "$code" = 0 ] || { echo "postgres salió con código $code; revisa: ./scripts/db.sh logs" >&2; exit 1; }
+      [ "$code" = 0 ] || { echo "postgres salió con código $code; revisa: $CMD logs" >&2; exit 1; }
     else
       echo "$NAME no existe"; exit 0
     fi
@@ -125,7 +141,7 @@ case "${1:-up}" in
     if installed; then systemctl --user stop "$SERVICE" || true; fi
     podman rm -f "$NAME" >/dev/null 2>&1 || true
     podman volume rm "$VOLUME" >/dev/null 2>&1 || true
-    echo "borrado. Ejecuta './scripts/db.sh up' para empezar de cero."
+    echo "borrado. Ejecuta '$CMD up' para empezar de cero."
     ;;
-  *) echo "uso: $0 {install|uninstall|up|down|logs|psql|reset|status}" >&2; exit 1 ;;
+  *) echo "uso: $0 [asesor] {install|uninstall|up|down|logs|psql|reset|status}" >&2; exit 1 ;;
 esac

@@ -1,0 +1,30 @@
+# PostgreSQL con pgvector para la memoria del asesor, como servicio de usuario (Quadlet).
+# Convive con finanzas-db: es otra instancia, con su propio volumen y puerto.
+# Se instala con ./scripts/db.sh asesor install (copia esto a ~/.config/containers/systemd/).
+[Unit]
+Description=PostgreSQL del asesor de finanzas (pgvector)
+
+[Container]
+Image=docker.io/pgvector/pgvector:pg18
+ContainerName=finanzas-asesor-db
+Environment=POSTGRES_USER=asesor
+Environment=POSTGRES_PASSWORD=asesor_dev
+Environment=POSTGRES_DB=asesor
+PublishPort=127.0.0.1:5435:5432
+Volume=finanzas-asesor-pgdata:/var/lib/postgresql
+# Solo guarda la memoria del asesor (cientos de filas): buffers y conexiones al mínimo.
+Exec=postgres -c shared_buffers=32MB -c max_connections=20
+HealthCmd=pg_isready -U asesor -d asesor
+HealthInterval=5s
+HealthRetries=10
+# La imagen oficial ya declara SIGINT (fast shutdown); se fija por claridad.
+StopSignal=SIGINT
+StopTimeout=60
+
+[Service]
+Restart=on-failure
+# Holgura sobre StopTimeout para que systemd no mate el cgroup antes del checkpoint final.
+TimeoutStopSec=90
+
+[Install]
+WantedBy=default.target

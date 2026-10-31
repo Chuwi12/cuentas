@@ -1,3 +1,4 @@
+mod asesor;
 mod auth;
 mod categories;
 mod config;
@@ -40,6 +41,8 @@ async fn main() {
 
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let config = Config::from_env()?;
+    // Antes de conectar a la BD: una URL mal escrita debe fallar al arrancar.
+    let asesor_client = asesor::AsesorClient::new(&config.asesor_url, config.asesor_token.clone())?;
 
     let db = PgPoolOptions::new()
         .max_connections(10)
@@ -53,9 +56,10 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("migraciones aplicadas");
 
     let bind_addr = config.bind_addr.clone();
-    let state = AppState::new(db, config);
+    let state = AppState::new(db, config, asesor_client);
 
     let api = Router::new()
+        .nest("/asesor", asesor::routes())
         .nest("/auth", auth::routes())
         .nest("/categories", categories::routes())
         .nest("/transactions", transactions::routes())

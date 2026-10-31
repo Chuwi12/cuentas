@@ -20,6 +20,9 @@ serde_json = "1"
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
 
+# Cliente del asesor. rustls-tls (0.12) usa ring, que ya compila sqlx; 0.13 arrastraría aws-lc.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
+
 argon2 = "0.6"
 jsonwebtoken = { version = "11", features = ["rust_crypto"] }  # sin backend explícito hace panic al firmar
 
@@ -30,6 +33,7 @@ dotenvy = "0.15"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
+http-body-util = "0.1"  # leer el cuerpo de las respuestas a trozos en los tests del proxy
 
 [profile.release]
 lto = "thin"
