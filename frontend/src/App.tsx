@@ -12,6 +12,8 @@ import CategoriesPage from './pages/CategoriesPage'
 const ReportsPage = lazy(() => import('./pages/ReportsPage'))
 // El asesor solo se usa de vez en cuando: también va aparte.
 const AsesorPage = lazy(() => import('./pages/AsesorPage'))
+// Importar un CSV es ocasional: también va aparte.
+const ImportPage = lazy(() => import('./pages/ImportPage'))
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { user, isLoading, error } = useSession()
@@ -29,6 +31,7 @@ export default function App() {
       <Route element={<RequireAuth><Layout /></RequireAuth>}>
         <Route index element={<DashboardPage />} />
         <Route path="movimientos" element={<TransactionsPage />} />
+        <Route path="movimientos/importar" element={<Suspense fallback={<div aria-busy="true" />}><ImportPage /></Suspense>} />
         <Route path="categorias" element={<CategoriesPage />} />
         <Route path="informes" element={<Suspense fallback={<div aria-busy="true" />}><ReportsPage /></Suspense>} />
         <Route path="asesor" element={<Suspense fallback={<div aria-busy="true" />}><AsesorPage /></Suspense>} />
