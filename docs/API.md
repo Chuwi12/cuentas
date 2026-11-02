@@ -13,8 +13,9 @@ Base URL en dev: `/api` (proxy de Vite hacia `http://127.0.0.1:8080`).
 - Auth: cookie `auth_token` (`httpOnly`, `SameSite=Lax`, `Path=/`). No hay header Bearer.
 - Errores: siempre `{"error": {"code": "<slug>", "message": "<texto en español>"}}`
   con el status HTTP adecuado. Códigos: `unauthorized`, `forbidden`, `not_found`,
-  `validation`, `conflict`, `registration_closed`, `invalid_credentials`, `internal` y
-  `asesor_unavailable` (503, el asesor con LLM no responde).
+  `validation`, `conflict`, `registration_closed`, `invalid_credentials`, `internal`,
+  `asesor_unavailable` (503, el asesor con LLM no responde) y `ambiguous_date` (422, la importación
+  CSV no puede decidir el formato de fecha: hay que elegirlo a mano).
 - El asesor (`/api/asesor/*`) tiene su propio contrato en [`ASESOR.md`](ASESOR.md).
 
 ## Enums
@@ -80,7 +81,85 @@ tabla `users` está vacía (app de un solo usuario).
 Validación: `0 < amount_cents <= 100000000000` (1.000 millones de euros, un tope de cordura
 para que ninguna suma desborde); `occurred_on` entre `2000-01-01` y `2100-12-31` (el mismo rango
 que aceptan los informes); el `kind` de la transacción debe coincidir con el `kind` de la
-categoría referenciada; `per_page` máximo 200. Los dos límites también son CHECK en la BD.
+categoría referenciada; `per_page` máximo 200. Los dos límites también son CHECK en la BD. La
+descripción pierde los caracteres de control y los invisibles de formato (anchura cero, marcas
+bidireccionales, BOM); se conservan los que unen emojis compuestos y escrituras como el persa.
+
+### Importación CSV — `/api/import/csv`
+
+Importa movimientos desde el CSV de cualquier banco. El servidor interpreta el fichero, el usuario
+elige qué columna es cada cosa y ve una previsualización antes de confirmar. Tres pasos, mismo
+cuerpo base: `csv` es el texto del fichero (UTF-8; se tolera BOM) de 2 MB como máximo y 5.000
+filas de datos como máximo (si no, `422 validation`). Un cuerpo de más de 5 MiB se corta antes de
+leerlo con `413`. Se interpreta un fichero a la vez: las peticiones simultáneas esperan su turno.
+
+| Método | Ruta | Cuerpo | Respuesta |
+|---|---|---|---|
+| POST | `/inspect` | `{csv}` | `200 {delimiter, headers, sample}` |
+| POST | `/preview` | `{csv, mapping}` | `200 {date_format, rows: [ImportRow], summary}` |
+| POST | `/` | `{csv, mapping, skip?, categories?}` | `201 {inserted, duplicates, skipped}` |
+
+```jsonc
+// inspect: separador detectado (";", "," o "\t"), primera fila y hasta 5 filas de muestra.
+{ "delimiter": ";", "headers": ["Fecha", "Concepto", "Importe"], "sample": [["2026-10-01", "Nómina", "2500,00"]] }
+
+Mapping {
+  "date": 0,                 // índice de columna (obligatorio)
+  "amount": 2,               // índice de columna (obligatorio), importe con signo
+  "description": 1,          // índice o null
+  "reference": null,         // índice o null: ID del banco, si lo trae (no se elige sola)
+  "has_header": true,
+  "date_format": "auto",     // "auto" | "ymd" | "dmy" | "mdy"
+  "decimal": "auto",         // "auto" | "comma" | "dot"
+  "invert_sign": false,      // si el banco pone los gastos en positivo
+  "tz": "Europe/Madrid"      // zona IANA del navegador (Intl…resolvedOptions().timeZone), distingue
+                             // mayúsculas; opcional (UTC); inválida → 422; solo afecta a ISO 8601 con zona
+}
+
+ImportRow {
+  "index": 0,                       // fila de datos no vacía (sin cabecera ni líneas en blanco), base 0
+  "occurred_on": "2026-10-01" | null,
+  "kind": "income" | "expense" | null,   // por el signo: negativo = gasto
+  "amount_cents": 250000 | null,         // siempre > 0, como en Transaction
+  "description": "Nómina" | null,
+  "category_id": uuid | null,       // sugerida
+  "duplicate": false,               // ya importada antes (dentro de un fichero nunca hay duplicadas)
+  "error": null | "texto en español" // fila inválida: no se importa
+}
+summary { "total": 41, "valid": 38, "duplicates": 2, "errors": 1 }
+date_format: "ymd" | "dmy" | "mdy"  // el formato con el que se han leído las fechas
+```
+
+- **Interpretación.** Fechas `YYYY-MM-DD`, `DD/MM/YYYY`, `MM/DD/YYYY` (con `-`, `/` o `.`, año de
+  4 cifras; una hora detrás se ignora) e ISO 8601 con hora y zona. Con `"auto"` gana el formato que
+  lee más filas (una fila basura suelta, como un "Saldo" final, queda como error de esa fila). Si
+  dos formatos leen las mismas filas pero dan fechas distintas, solo se resuelve a favor de
+  día/mes (el formato de la app) y solo si abarca claramente menos tiempo (menos de la mitad): un
+  extracto es un periodo seguido, así que del 01/10 al 09/10 es día/mes. En cualquier otro caso
+  (`01/02/2026` sola, o un cargo el día 5 de cada mes, que leído como mes/día parecerían días
+  seguidos), `422` con code `ambiguous_date` y se elige a mano. La conversión de ISO 8601 con zona usa `tz`
+  con su horario de verano en la fecha de cada movimiento. Las filas con error conservan su
+  descripción. Importes con coma o punto decimal, separador de miles, un solo signo (`-`, `+`, o
+  paréntesis equilibrados) y, como texto, solo un símbolo o código de moneda (`€`, `$`, `£`,
+  `EUR`, `USD`, `GBP`): cualquier otra letra («12,50 DR») es error de fila. Las descripciones y
+  referencias pierden los caracteres de control, de formato bidireccional y de anchura cero. Se aplican los mismos límites que a `POST /api/transactions` (importe > 0 y
+  ≤ 1.000.000.000,00 €, fecha 2000–2100, descripción ≤ 500 caracteres). Un importe 0 es error.
+- **Duplicados.** Cada movimiento importado guarda un `import_ref` único por usuario: una huella
+  sha256 de (fecha, importe, tipo, n.º de aparición de esa combinación en el fichero) más la
+  referencia del banco si se mapea (`ref:`, ≤ 200 caracteres) o, si no, la descripción en
+  minúsculas y con los espacios colapsados (`fp:`). La referencia nunca basta sola: la de un recibo
+  domiciliado se repite cada mes. Reimportar un CSV solapado no duplica nada, y dos cafés idénticos
+  el mismo día siguen siendo dos. Límite conocido: la app no distingue cuentas, así que el mismo
+  movimiento (fecha, importe, descripción) en dos cuentas cuenta como duplicado.
+- **Categoría sugerida.** La más usada en los movimientos anteriores del mismo tipo y con la misma
+  descripción normalizada (minúsculas, sin espacios repetidos ni cifras). Lo que categorizas hoy
+  mejora las sugerencias de mañana.
+- **Confirmar.** `skip` son índices de fila que no se importan y `categories` es un mapa
+  `{índice: uuid|null}` que sustituye la sugerencia (un índice ausente aplica la sugerida; `null`
+  la deja sin categoría). En la respuesta, `skipped` cuenta las filas sin error incluidas en `skip`
+  (aunque estuvieran duplicadas); las filas con error no entran en ningún contador. En `summary`, `total = valid + duplicates + errors`. Se inserta todo en una transacción: las filas
+  con error o duplicadas se saltan sin fallar el resto. Las categorías deben ser del usuario y del
+  mismo tipo que el movimiento (si no, `422`).
 
 ### Resumen 50/30/20 — `/api/summary`
 

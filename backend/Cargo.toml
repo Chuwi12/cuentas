@@ -6,7 +6,7 @@ rust-version = "1.94"
 
 [dependencies]
 axum = { version = "0.8", features = ["macros"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "sync"] }
 tower = "0.5"
 tower-http = { version = "0.7", features = ["trace", "fs", "compression-gzip"] }
 tower-cookies = "0.11"
@@ -30,6 +30,13 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 thiserror = "2"
 dotenvy = "0.15"
+
+# Importador de CSV: comillas RFC 4180 con separadores y saltos de línea dentro de un campo.
+csv = "1"
+# Huella de los movimientos importados (SHA-256); 0.10 ya está en el árbol por sqlx y jsonwebtoken.
+sha2 = { version = "0.10", default-features = false }
+# Zona IANA del navegador para pasar los instantes ISO 8601 a fecha local con su horario de verano.
+chrono-tz = { version = "0.10", default-features = false }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }

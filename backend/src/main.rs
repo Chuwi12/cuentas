@@ -4,6 +4,7 @@ mod categories;
 mod config;
 mod domain;
 mod error;
+mod import;
 mod reports;
 mod state;
 mod summary;
@@ -63,6 +64,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .nest("/auth", auth::routes())
         .nest("/categories", categories::routes())
         .nest("/transactions", transactions::routes())
+        .nest("/import/csv", import::routes())
         .nest("/summary", summary::routes())
         .nest("/reports", reports::routes())
         .route("/health", get(|| async { "ok" }));
@@ -104,6 +106,7 @@ async fn rejection_to_json(res: Response) -> Response {
     let (code, message) = match status {
         StatusCode::NOT_FOUND => ("not_found", "No encontrado".to_string()),
         StatusCode::METHOD_NOT_ALLOWED => ("not_found", "Método no permitido".to_string()),
+        StatusCode::PAYLOAD_TOO_LARGE => ("validation", "El envío es demasiado grande".to_string()),
         _ => ("validation", format!("Datos no válidos: {detail}")),
     };
     let body = serde_json::json!({"error": {"code": code, "message": message}});
