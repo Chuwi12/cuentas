@@ -19,6 +19,10 @@ lo que sale, y la app calcula cómo se reparte tu dinero entre **necesidades (50
 - **Evolución.** Los últimos meses en barras apiladas, con la línea de ingresos encima.
 - **Movimientos.** Alta rápida (escribes `12,50`, eliges una categoría y pulsas Enter), filtros
   por mes, tipo, cubo, categoría y texto, y una lista agrupada por días con subtotales.
+- **Importar desde el banco.** Subes el CSV de tu banco, eliges qué columna es la fecha, el importe
+  y el concepto, y ves una previsualización antes de confirmar. Reimportar un extracto que se solapa
+  con otro no duplica nada, y la categoría se sugiere a partir de cómo categorizaste antes
+  movimientos con la misma descripción.
 - **Categorías editables.** Vienen de serie alquiler, comida, suministros, transporte, gym,
   ropa, ocio e inversión, además de nómina y extras como ingresos. Puedes cambiar el cubo de
   cualquiera en el sitio (¿el gym es una necesidad o un deseo? lo decides tú), crear nuevas
@@ -95,9 +99,9 @@ alcance de JavaScript.
      movimiento.
    - La fuente separaba la coma decimal de las cifras ("2100 , 00 €").
 
-La prueba de punta a punta de la API está en [`scripts/e2e.py`](scripts/e2e.py): 103
-comprobaciones, con las cifras del 50/30/20 y de los informes calculadas a mano. El backend tiene
-además 92 tests unitarios.
+La prueba de punta a punta de la API está en [`scripts/e2e.py`](scripts/e2e.py): 170
+comprobaciones, con las cifras del 50/30/20, de los informes y de la importación calculadas a mano.
+El backend tiene además 149 tests unitarios.
 
 ## Arrancar en local
 
