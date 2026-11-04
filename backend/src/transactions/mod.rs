@@ -218,7 +218,7 @@ struct CreateBody {
     description: Option<String>,
 }
 
-fn validate_amount(amount_cents: i64) -> AppResult<()> {
+pub(crate) fn validate_amount(amount_cents: i64) -> AppResult<()> {
     if amount_cents <= 0 {
         return Err(AppError::Validation(
             "El importe debe ser mayor que 0".into(),
@@ -232,7 +232,7 @@ fn validate_amount(amount_cents: i64) -> AppResult<()> {
     Ok(())
 }
 
-fn validate_date(occurred_on: NaiveDate) -> AppResult<()> {
+pub(crate) fn validate_date(occurred_on: NaiveDate) -> AppResult<()> {
     if !(MIN_DATE..=MAX_DATE).contains(&occurred_on) {
         return Err(AppError::Validation(
             "La fecha debe estar entre 2000-01-01 y 2100-12-31".into(),
@@ -241,13 +241,25 @@ fn validate_date(occurred_on: NaiveDate) -> AppResult<()> {
     Ok(())
 }
 
-/// Recorta la descripción; una cadena vacía tras recortar se guarda como
-/// `null`. Límite de 500 caracteres (coincide con el CHECK de la migración).
-fn normalize_description(raw: Option<String>) -> AppResult<Option<String>> {
+/// Quita los caracteres que Postgres no admite (NUL) o que no se ven y permiten falsear lo
+/// que se lee: de control (se conservan los espacios en blanco, como el salto de línea),
+/// marcas de dirección del texto, de anchura cero y el BOM.
+pub(crate) fn strip_invisible(text: &str) -> String {
+    text.chars()
+        .filter(|&c| {
+            !(c.is_control() && !c.is_whitespace())
+                && !matches!(c, '\u{200B}' | '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2060}'..='\u{2069}' | '\u{FEFF}')
+        })
+        .collect()
+}
+
+/// Limpia (`strip_invisible`) y recorta la descripción; una cadena vacía tras recortar se
+/// guarda como `null`. Límite de 500 caracteres (coincide con el CHECK de la migración).
+pub(crate) fn normalize_description(raw: Option<String>) -> AppResult<Option<String>> {
     match raw {
         None => Ok(None),
         Some(s) => {
-            let trimmed = s.trim().to_string();
+            let trimmed = strip_invisible(&s).trim().to_string();
             if trimmed.is_empty() {
                 Ok(None)
             } else if trimmed.chars().count() > 500 {
@@ -497,6 +509,25 @@ mod tests {
         assert_eq!(normalize_description(None).unwrap(), None);
         assert!(normalize_description(Some("a".repeat(501))).is_err());
         assert!(normalize_description(Some("a".repeat(500))).is_ok());
+    }
+
+    #[test]
+    fn invisible_and_control_characters_are_stripped_from_descriptions() {
+        let clean = |s: &str| normalize_description(Some(s.into())).unwrap();
+        assert_eq!(clean("Ca\u{0}fé"), Some("Café".into()));
+        assert_eq!(clean("\u{0}"), None);
+        // Control de varios tipos (BEL, DEL, C1) fuera; el salto de línea y el tabulador se conservan.
+        assert_eq!(clean("a\u{7}b\u{7f}c\u{9f}d\ne\tf"), Some("abcd\ne\tf".into()));
+        // Anchura cero, marcas bidireccionales, aislados y BOM.
+        for c in ['\u{200B}', '\u{200E}', '\u{200F}', '\u{202A}', '\u{202E}', '\u{2060}', '\u{2066}', '\u{2069}', '\u{FEFF}'] {
+            assert_eq!(clean(&format!("a{c}b")), Some("ab".into()), "{c:?}");
+        }
+        // Lo que es texto de verdad no se toca: ZWJ y ZWNJ forman emojis compuestos y palabras en persa.
+        assert_eq!(clean("Cena 👨\u{200D}👩\u{200D}👧"), Some("Cena 👨\u{200D}👩\u{200D}👧".into()));
+        assert_eq!(clean("می\u{200C}خواهم"), Some("می\u{200C}خواهم".into()));
+        assert_eq!(clean("Niño ñandú — 日本 €"), Some("Niño ñandú — 日本 €".into()));
+        // El límite se aplica ya limpio.
+        assert!(normalize_description(Some(format!("{}\u{0}", "a".repeat(500)))).is_ok());
     }
 
     #[test]

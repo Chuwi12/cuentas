@@ -1,6 +1,7 @@
 import type {
-  Analisis, AsesorEvent, Category, CategoryInput, Memoria, MonthSummary, Page, Report, ReportPeriodKind,
-  ReportScope, Transaction, TransactionInput, TrendPoint, User,
+  Analisis, AsesorEvent, Category, CategoryInput, ImportInspect, ImportMapping, ImportPreview, ImportResult,
+  Memoria, MonthSummary, Page, Report, ReportPeriodKind, ReportScope, Transaction, TransactionInput,
+  TrendPoint, User,
 } from './types'
 
 /** Error del backend con el `code` del contrato (`validation`, `conflict`…). */
@@ -32,7 +33,8 @@ async function send(method: string, path: string, body?: unknown, signal?: Abort
 /** Respuesta con status ≠ 2xx y cuerpo `{error:{code,message}}` → ApiError. */
 async function toApiError(res: Response): Promise<ApiError> {
   const data = await res.json().catch(() => null)
-  return new ApiError(res.status, data?.error?.code ?? 'internal', data?.error?.message ?? `Error ${res.status}`)
+  const fallback = res.status === 413 ? 'El fichero es demasiado grande para enviarlo.' : `Error ${res.status}`
+  return new ApiError(res.status, data?.error?.code ?? 'internal', data?.error?.message ?? fallback)
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -148,6 +150,15 @@ export const api = {
     update: (id: string, patch: Partial<TransactionInput>) =>
       request<Transaction>('PATCH', `/transactions/${id}`, patch),
     remove: (id: string) => request<void>('DELETE', `/transactions/${id}`),
+  },
+  /** Importación de movimientos desde un CSV: inspeccionar, previsualizar y confirmar. */
+  importCsv: {
+    inspect: (csv: string) => request<ImportInspect>('POST', '/import/csv/inspect', { csv }),
+    preview: (csv: string, mapping: ImportMapping) =>
+      request<ImportPreview>('POST', '/import/csv/preview', { csv, mapping }),
+    /** `skip`: índices de fila que no se importan. `categories`: solo las que difieren de la sugerida. */
+    confirm: (csv: string, mapping: ImportMapping, skip: number[], categories: Record<number, string | null>) =>
+      request<ImportResult>('POST', '/import/csv', { csv, mapping, skip, categories }),
   },
   summary: {
     month: (month?: string) => request<MonthSummary>('GET', `/summary${qs({ month })}`),

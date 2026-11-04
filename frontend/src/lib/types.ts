@@ -160,6 +160,67 @@ export interface Report {
   insights: ReportInsight[]
 }
 
+// ── Importación CSV (/api/import/csv) ───────────────────────────────────
+export type ImportDateFormat = 'auto' | 'ymd' | 'dmy' | 'mdy'
+export type ImportDecimal = 'auto' | 'comma' | 'dot'
+
+export interface ImportMapping {
+  /** Índices de columna (base 0). */
+  date: number
+  amount: number
+  description: number | null
+  reference: number | null
+  has_header: boolean
+  date_format: ImportDateFormat
+  decimal: ImportDecimal
+  /** El banco pone los gastos en positivo. */
+  invert_sign: boolean
+  /** Zona IANA del navegador ("Europe/Madrid"); solo cuenta para fechas ISO 8601 con zona. */
+  tz: string
+}
+
+export interface ImportInspect {
+  delimiter: string
+  /** Primera fila del fichero, sea cabecera o no. */
+  headers: string[]
+  /** Hasta 5 filas siguientes a la primera. */
+  sample: string[][]
+}
+
+export interface ImportRow {
+  /** Fila de datos, sin contar la cabecera, base 0. */
+  index: number
+  occurred_on: string | null
+  kind: Kind | null
+  /** Siempre > 0 cuando existe; el signo lo da `kind`. */
+  amount_cents: number | null
+  description: string | null
+  /** Categoría sugerida. */
+  category_id: string | null
+  duplicate: boolean
+  error: string | null
+}
+
+export interface ImportSummary {
+  total: number
+  valid: number
+  duplicates: number
+  errors: number
+}
+
+export interface ImportPreview {
+  /** Formato con el que el servidor ha leído las fechas (también cuando se pidió "auto"). */
+  date_format: Exclude<ImportDateFormat, 'auto'>
+  rows: ImportRow[]
+  summary: ImportSummary
+}
+
+export interface ImportResult {
+  inserted: number
+  duplicates: number
+  skipped: number
+}
+
 // ── Asesor (docs/ASESOR.md, API pública) ────────────────────────────────
 export interface Analisis {
   /** YYYY-MM */

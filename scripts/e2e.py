@@ -166,6 +166,122 @@ s,L=req("GET","/transactions?per_page=200"); check("movimientos de Comida quedan
 s,_=req("DELETE",f"/transactions/{ocio['id']}"); check("borrar movimiento 204",s==204)
 s,_=req("DELETE",f"/transactions/{ocio['id']}"); check("borrar dos veces 404",s==404)
 
+# ---- Importación CSV ----
+def imp(path,body,auth=True): return req("POST","/import/csv"+path,body,auth=auth)
+MAP={"date":0,"amount":2,"description":1,"reference":None,"has_header":True,"date_format":"auto","decimal":"auto","invert_sign":False,"tz":"Europe/Madrid"}
+CSV1=('﻿Fecha;Concepto;Importe\r\n'
+      '13/10/2026;"Café Central; centro";-1,50\r\n'
+      '13/10/2026;"Café Central; centro";-1,50\r\n'
+      '14/10/2026;"Nómina ""octubre""\nsegunda línea";"2.500,00"\r\n'
+      '15/10/2026;Recibo luz 8841;-45,30 €\r\n'
+      '16/10/2026;Sin importe;0\r\n')
+for p,b in [("/inspect",{"csv":CSV1}),("/preview",{"csv":CSV1,"mapping":MAP}),("",{"csv":CSV1,"mapping":MAP})]:
+    s,_=imp(p,b,auth=False); check(f"import /api/import/csv{p} sin sesión -> 401",s==401,s)
+s,b=imp("/inspect",{"csv":CSV1}); check("inspect: BOM fuera, separador ; y cabeceras",s==200 and b["delimiter"]==";" and b["headers"]==["Fecha","Concepto","Importe"],(s,b))
+check("inspect: muestra con comillas y saltos de línea",s==200 and len(b["sample"])==5 and b["sample"][0]==["13/10/2026","Café Central; centro","-1,50"] and b["sample"][2][1]=='Nómina "octubre"\nsegunda línea',b.get("sample") if s==200 else b)
+s,b=imp("/inspect",{"csv":"fecha,desc,importe\n2026-10-13T23:30:00Z,Cena,-12.50\n"}); check("inspect: separador ,",s==200 and b["delimiter"]==",",(s,b))
+s,b=imp("/inspect",{"csv":"﻿ \n"}); check("inspect: fichero vacío -> 422",s==422 and b["error"]["code"]=="validation",(s,b))
+s,b=imp("/inspect",{}); check("inspect: sin csv -> 422",s==422 and b["error"]["code"]=="validation",(s,b))
+
+s,P=imp("/preview",{"csv":CSV1,"mapping":MAP}); R=P["rows"] if s==200 else []
+check("preview: date_format devuelve el formato usado (dmy)",s==200 and P["date_format"]=="dmy",P.get("date_format") if s==200 else P)
+check("preview: resumen 5 filas, 4 válidas, 1 error",s==200 and P["summary"]=={"total":5,"valid":4,"duplicates":0,"errors":1},(s,P))
+check("preview: gasto con coma decimal",R[0]["kind"]=="expense" and R[0]["amount_cents"]==150 and R[0]["occurred_on"]=="2026-10-13" and R[0]["description"]=="Café Central; centro",R[:1])
+check("preview: ingreso con miles y descripción multilínea compactada",R[2]["kind"]=="income" and R[2]["amount_cents"]==250000 and R[2]["description"]=='Nómina "octubre" segunda línea',R[2:3])
+check("preview: gasto con símbolo de moneda",R[3]["kind"]=="expense" and R[3]["amount_cents"]==4530,R[3:4])
+check("preview: importe 0 es error de fila",R[4]["error"] and R[4]["amount_cents"] is None and R[4]["kind"] is None,R[4:5])
+s,P2=imp("/preview",{"csv":CSV1,"mapping":{**MAP,"invert_sign":True}}); check("preview: invert_sign cambia los tipos",s==200 and P2["rows"][0]["kind"]=="income" and P2["rows"][2]["kind"]=="expense",(s,P2))
+s,b=imp("/preview",{"csv":"Fecha;Concepto;Importe\n01/02/2026;a;1,00\n03/04/2026;b;2,00\n","mapping":MAP}); check("preview: fecha ambigua con auto -> 422 con su propio código",s==422 and b["error"]["code"]=="ambiguous_date" and "ambiguo" in b["error"]["message"],(s,b))
+s,b=imp("",{"csv":"Fecha;Concepto;Importe\n01/02/2026;a;1,00\n","mapping":MAP}); check("confirmar: la ambigüedad también es ambiguous_date y no inserta",s==422 and b["error"]["code"]=="ambiguous_date",(s,b))
+MONTHLY="Fecha;Concepto;Importe\n"+"".join(f"05/{m:02d}/2026;Cargo mensual;-10,00\n" for m in range(1,10))
+s,b=imp("/preview",{"csv":MONTHLY,"mapping":MAP}); check("cargo mensual el día 5 (parecería 1-9 de mayo) -> ambiguous_date",s==422 and b["error"]["code"]=="ambiguous_date",(s,b))
+s,b=imp("/preview",{"csv":MONTHLY,"mapping":{**MAP,"date_format":"dmy"}}); check("cargo mensual con dmy explícito: 9 meses",s==200 and b["date_format"]=="dmy" and [r["occurred_on"] for r in b["rows"]][:2]==["2026-01-05","2026-02-05"],(s,b))
+s,b=imp("/preview",{"csv":"Fecha;Concepto;Importe\n"+"".join(f"{d:02d}/10/2026;Principio de mes;-1,00\n" for d in (1,3,5,9)),"mapping":MAP}); check("auto: del 01/10 al 09/10 se lee como día/mes",s==200 and b["date_format"]=="dmy" and b["rows"][0]["occurred_on"]=="2026-10-01",(s,b))
+s,b=imp("/preview",{"csv":"fecha,desc,importe\n2026-10-13T23:30:00Z,a,1.00\n","mapping":{**MAP,"tz":"Mars/Olympus"}}); check("tz inválida con fechas ISO con zona -> 422 validation",s==422 and b["error"]["code"]=="validation",(s,b))
+s,b=imp("/preview",{"csv":"Fecha;Concepto;Importe\n13/02/2026;a;1,00\n","mapping":{**MAP,"tz":"Mars/Olympus"}}); check("tz inválida no bloquea un fichero sin horas",s==200 and b["rows"][0]["occurred_on"]=="2026-02-13",(s,b))
+s,b=imp("/preview",{"csv":"Fecha;Concepto;Importe\n01/02/2026;a;1,00\n03/04/2026;b;2,00\n","mapping":{**MAP,"date_format":"mdy"}}); check("preview: formato explícito resuelve la ambigüedad",s==200 and b["rows"][0]["occurred_on"]=="2026-01-02",(s,b))
+s,b=imp("/preview",{"csv":"fecha,desc,importe\n2026-07-01T22:30:00Z,Verano,-1.00\n2026-01-01T22:30:00Z,Invierno,-2.00\n","mapping":MAP}); check("preview: la zona usa el horario de verano de cada fecha (22:30Z: julio cambia de día, enero no) y date_format ymd",s==200 and [r["occurred_on"] for r in b["rows"]]==["2026-07-02","2026-01-01"] and b["date_format"]=="ymd",(s,b))
+s,b=imp("/preview",{"csv":"fecha,desc,importe\n2026-10-13T23:30:00Z,Cena,-12.50\n","mapping":MAP}); check("preview: ISO con zona pasa a fecha local con tz (CEST en octubre)",s==200 and b["rows"][0]["occurred_on"]=="2026-10-14" and b["rows"][0]["amount_cents"]==1250,(s,b))
+s,b=imp("/preview",{"csv":CSV1,"mapping":{**MAP,"amount":9}}); check("preview: columna inexistente -> 422",s==422,(s,b))
+s,b=imp("/preview",{"csv":CSV1}); check("preview: sin mapeo -> 422",s==422 and b["error"]["code"]=="validation",(s,b))
+
+s,b=imp("",{"csv":CSV1,"mapping":MAP,"categories":{"2":C["Nómina"]["id"]}}); check("confirmar: 4 insertados",s==201 and b=={"inserted":4,"duplicates":0,"skipped":0},(s,b))
+s,L=req("GET","/transactions?q=Caf%C3%A9%20Central"); check("dos filas idénticas se importan como dos",s==200 and L["total"]==2,L.get("total"))
+s,L=req("GET","/transactions?q=segunda"); check("categoría elegida en la confirmación se guarda",L["total"]==1 and L["items"][0]["category_id"]==C["Nómina"]["id"] and L["items"][0]["amount_cents"]==250000,L["items"])
+s,b=imp("",{"csv":CSV1,"mapping":MAP}); check("reimportar el mismo CSV: 0 insertados, todo duplicado",s==201 and b=={"inserted":0,"duplicates":4,"skipped":0},(s,b))
+s,P=imp("/preview",{"csv":CSV1,"mapping":MAP}); check("preview del mismo CSV: todo duplicado",s==200 and P["summary"]=={"total":5,"valid":0,"duplicates":4,"errors":1} and [r["duplicate"] for r in P["rows"]]==[True,True,True,True,False],(s,P["summary"]))
+
+CSV2=('Fecha;Concepto;Importe\n'
+      '13/10/2026;"Café Central; centro";-1,50\n'
+      '14/10/2026;"Nómina ""octubre""\nsegunda línea";"2.500,00"\n'
+      '17/10/2026;Compra nueva;-20,00\n')
+s,b=imp("",{"csv":CSV2,"mapping":MAP}); check("CSV solapado: solo inserta lo nuevo",s==201 and b=={"inserted":1,"duplicates":2,"skipped":0},(s,b))
+CSV2b='Fecha;Concepto;Importe\n'+'13/10/2026;"Café Central; centro";-1,50\n'*3+'17/10/2026;Compra nueva;-20,00\n'
+s,b=imp("",{"csv":CSV2b,"mapping":MAP}); check("tercera aparición del mismo café el mismo día es nueva",s==201 and b=={"inserted":1,"duplicates":3,"skipped":0},(s,b))
+s,L=req("GET","/transactions?q=Caf%C3%A9%20Central"); check("ya hay tres cafés",L["total"]==3,L["total"])
+
+# referencia del banco: nunca basta sola (la de un recibo domiciliado se repite cada mes)
+MAPR={**MAP,"reference":3}
+CSVR='Fecha;Concepto;Importe;Ref\n20/10/2026;Taxi;-9,00;TX-1\n20/10/2026;Taxi;-9,00;TX-2\n21/10/2026;Tren;-30,00;TX-1\n22/10/2026;Sin ref;-1,00;\n'
+s,P=imp("/preview",{"csv":CSVR,"mapping":MAPR}); check("referencia: ninguna fila es duplicada (misma referencia con otra fecha/importe es otro movimiento)",s==200 and [r["duplicate"] for r in P["rows"]]==[False]*4,(s,P))
+s,b=imp("",{"csv":CSVR,"mapping":MAPR}); check("referencia: se insertan las 4",s==201 and b=={"inserted":4,"duplicates":0,"skipped":0},(s,b))
+s,b=imp("",{"csv":CSVR,"mapping":MAPR}); check("referencia: reimportar el fichero -> todo duplicado",s==201 and b=={"inserted":0,"duplicates":4,"skipped":0},(s,b))
+s,b=imp("",{"csv":'Fecha;Concepto;Importe;Ref\n25/10/2026;Otro nombre;-99,00;TX-2\n',"mapping":MAPR}); check("referencia: la misma referencia con otros datos se importa",s==201 and b=={"inserted":1,"duplicates":0,"skipped":0},(s,b))
+s,b=imp("",{"csv":'Fecha;Concepto;Importe;Ref\n26/10/2026;Doble;-5,00;TX-9\n26/10/2026;Doble;-5,00;TX-9\n',"mapping":MAPR}); check("referencia: misma referencia, fecha e importe dos veces en el fichero -> dos movimientos",s==201 and b=={"inserted":2,"duplicates":0,"skipped":0},(s,b))
+RECA='Fecha;Concepto;Importe;Ref\n15/10/2026;Recibo luz;-45,00;MANDATO-77\n'
+RECB='Fecha;Concepto;Importe;Ref\n15/11/2026;Recibo luz;-45,00;MANDATO-77\n'
+s,a1=imp("",{"csv":RECA,"mapping":MAPR}); s,b1=imp("",{"csv":RECB,"mapping":MAPR})
+check("recibo mensual con la misma referencia en dos ficheros: se importan los dos meses",a1=={"inserted":1,"duplicates":0,"skipped":0} and b1=={"inserted":1,"duplicates":0,"skipped":0},(a1,b1))
+s,L=req("GET","/transactions?q=Recibo%20luz"); rec=sorted(i["occurred_on"] for i in L["items"] if i["description"]=="Recibo luz")
+check("...y hay dos recibos",s==200 and rec==["2026-10-15","2026-11-15"],rec)
+s,b=imp("",{"csv":RECA,"mapping":MAPR}); check("...y reimportar un mes sí es duplicado",s==201 and b=={"inserted":0,"duplicates":1,"skipped":0},(s,b))
+# la huella conserva las cifras: dos Bizum el mismo día e importe a números distintos son dos
+BIZ='Fecha;Concepto;Importe\n20/10/2026;Bizum a 600111222;-10,00\n20/10/2026;Bizum a 600333444;-10,00\n'
+s,b=imp("",{"csv":BIZ,"mapping":MAP}); check("huella con cifras: dos Bizum a números distintos son dos",s==201 and b=={"inserted":2,"duplicates":0,"skipped":0},(s,b))
+s,b=imp("",{"csv":BIZ,"mapping":MAP}); check("...y reimportar da dos duplicados",s==201 and b=={"inserted":0,"duplicates":2,"skipped":0},(s,b))
+
+# categoría sugerida: lo categorizado hoy mejora las sugerencias
+cafe=req("GET","/transactions?q=Caf%C3%A9%20Central")[1]["items"][0]
+s,b=req("PATCH",f"/transactions/{cafe['id']}",{"category_id":C["Ocio"]["id"]}); check("categorizo un café como Ocio",s==200,(s,b))
+CSV3=('Fecha;Concepto;Importe\n'
+      '01/11/2026;"CAFÉ   central; CENTRO 0042";-2,00\n'
+      '01/11/2026;"Café Central; centro";3,00\n'
+      '01/11/2026;Algo sin historial;-4,00\n')
+s,P=imp("/preview",{"csv":CSV3,"mapping":{**MAP,"date_format":"dmy"}}); R=P["rows"] if s==200 else []
+check("sugerida: misma descripción normalizada y tipo -> Ocio",s==200 and R[0]["category_id"]==C["Ocio"]["id"],(s,R[:1]))
+check("sugerida: otro tipo no hereda la categoría; sin historial -> null",R[1]["category_id"] is None and R[2]["category_id"] is None,R[1:])
+s,b=imp("",{"csv":CSV3,"mapping":{**MAP,"date_format":"dmy"},"skip":[1]}); check("confirmar con skip: omitida y sugerencia aplicada",s==201 and b=={"inserted":2,"duplicates":0,"skipped":1},(s,b))
+s,L=req("GET","/transactions?q=0042"); check("la sugerencia se guarda como categoría",L["total"]==1 and L["items"][0]["category_id"]==C["Ocio"]["id"],L["items"])
+s,L=req("GET","/transactions?q=sin%20historial"); check("sin historial, el movimiento queda sin categoría",L["total"]==1 and L["items"][0]["category_id"] is None,L["items"])
+s,b=imp("",{"csv":'Fecha;Concepto;Importe\n13/11/2026;"Café Central; centro 7777";-2,00\n',"mapping":MAP,"categories":{"0":None}}); check("categoría null explícita sustituye la sugerencia",s==201 and b["inserted"]==1,(s,b))
+s,L=req("GET","/transactions?q=7777"); check("...y el movimiento queda sin categoría",L["total"]==1 and L["items"][0]["category_id"] is None,L["items"])
+
+# categoría de otro tipo o ajena: 422 y no se inserta nada
+CSV4='Fecha;Concepto;Importe\n13/11/2026;Fila A4;-5,00\n13/11/2026;Fila B4;-6,00\n'
+s,b=imp("",{"csv":CSV4,"mapping":MAP,"categories":{"1":C["Nómina"]["id"]}}); check("categoría de otro tipo -> 422",s==422 and b["error"]["code"]=="validation",(s,b))
+s,b=imp("",{"csv":CSV4,"mapping":MAP,"categories":{"0":"00000000-0000-4000-8000-000000000000"}}); check("categoría inexistente -> 422",s==422,(s,b))
+s,L=req("GET","/transactions?q=Fila%20"); check("tras los 422 no se ha insertado nada (ni la fila válida)",s==200 and L["total"]==0,L.get("total"))
+s,b=imp("",{"csv":CSV4,"mapping":MAP,"categories":{"0":C["Ocio"]["id"],"1":None}}); check("categoría del mismo tipo y null -> 201",s==201 and b["inserted"]==2,(s,b))
+
+# NUL y caracteres invisibles: Postgres rechaza 0x00, que antes daba 500
+s,b=tx("expense",100,"Ocio",desc="Caf\u0000é\u202e\u200b"); check("alta manual con NUL en la descripción -> 201 sin el NUL ni los invisibles",s==201 and b["description"]=="Café",(s,b))
+if s==201: req("DELETE",f"/transactions/{b['id']}")
+NUL='Fecha;Concepto;Importe;Ref\n27/10/2026;"Pa\u0000go \u202etest";-3,00;"N\u00001"\n'
+s,P=imp("/preview",{"csv":NUL,"mapping":MAPR}); check("preview: la descripción llega sin NUL",s==200 and P["rows"][0]["description"]=="Pago test" and P["rows"][0]["error"] is None,(s,P))
+s,b=imp("",{"csv":NUL,"mapping":MAPR}); check("importar con NUL en descripción y referencia -> 201 (no 500)",s==201 and b["inserted"]==1,(s,b))
+s,L=req("GET","/transactions?q=Pago%20test"); check("...y se guarda sin NUL",s==200 and L["total"]==1 and L["items"][0]["description"]=="Pago test",L)
+# importes con letras que no son moneda
+s,P=imp("/preview",{"csv":"Fecha;Concepto;Importe\n13/10/2026;a;12,50 DR\n14/10/2026;b;Saldo 12,50\n15/10/2026;c;--5,00\n16/10/2026;d;12,50 EUR\n","mapping":MAP})
+check("importes: «12,50 DR», «Saldo 12,50» y «--5,00» son error de fila; «12,50 EUR» vale",s==200 and [r["error"] for r in P["rows"]]==["Importe no válido"]*3+[None] and P["rows"][3]["amount_cents"]==1250,(s,P))
+
+# límites
+many=lambda n:"Fecha;Concepto;Importe\n"+"".join(f"01/01/2026;Fila {i};-1,00\n" for i in range(n))
+s,b=imp("/preview",{"csv":many(5001),"mapping":MAP}); check("5.001 filas -> 422",s==422 and b["error"]["code"]=="validation" and "5.000" in b["error"]["message"],(s,b))
+s,b=imp("/inspect",{"csv":many(5001)}); check("inspect: 5.001 filas -> 422",s==422,(s,b))
+s,b=imp("",{"csv":many(5001),"mapping":MAP}); check("confirmar: 5.001 filas -> 422",s==422,(s,b))
+s,b=imp("/preview",{"csv":many(5000),"mapping":MAP}); check("5.000 filas se aceptan",s==200 and b["summary"]["total"]==5000,(s,b.get("summary") if s==200 else b))
+s,b=imp("/preview",{"csv":"a;b\n"+"x"*(2*1024*1024),"mapping":MAP}); check("más de 2 MB -> 422",s==422 and "2 MB" in b["error"]["message"],(s,b))
+
 s,_=req("POST","/auth/logout"); s2,_=req("GET","/auth/me"); check("logout invalida sesión",s==204 and s2==401,(s,s2))
 s,b=req("POST","/auth/login",{"email":"yo@example.com","password":"mala-contraseña-x"}); check("login mala 401 invalid_credentials",s==401 and b["error"]["code"]=="invalid_credentials",(s,b))
 s,b=req("POST","/auth/login",{"email":"nadie@example.com","password":"mala-contraseña-x"}); check("login usuario inexistente: mismo error",s==401 and b["error"]["code"]=="invalid_credentials",(s,b))

@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Plus } from 'lucide-react'
+import { Plus, Upload } from 'lucide-react'
 import { api, keys } from '../lib/api'
 import { currentMonth, monthRange } from '../lib/dates'
-import { Button, PageHeader } from '../components/ui'
+import { Button, LinkButton, PageHeader } from '../components/ui'
 import { TransactionFilters } from './transactions/TransactionFilters'
 import { TransactionList } from './transactions/TransactionList'
 import { TransactionDialog } from './transactions/TransactionDialog'
@@ -81,6 +81,9 @@ export default function TransactionsPage() {
   return (
     <div>
       <PageHeader title="Movimientos">
+        <LinkButton to="/movimientos/importar" variant="secondary">
+          <Upload size={18} aria-hidden />Importar CSV
+        </LinkButton>
         <div className="hidden md:block">
           <Button onClick={() => setDialog({ mode: 'create' })}>
             <Plus size={18} aria-hidden />Añadir movimiento
