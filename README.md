@@ -57,6 +57,34 @@ un LLM local analiza cada mes y responde preguntas sobre tus datos.
 - Los gastos sin categoría no cuentan en ningún cubo, pero sí reducen el ahorro.
 - Resumen e informes usan la misma fórmula, así que dan la misma cifra para el mismo mes.
 
+## Importación de extractos bancarios
+
+Cualquier banco permite descargar un fichero CSV con los movimientos, pero no hay dos que usen el
+mismo formato: cambian los nombres de columna, las fechas, los separadores decimales y los signos.
+La importación está diseñada para absorber cualquier extracto sin duplicar movimientos al solapar meses.
+
+- **Flujo en cuatro pasos.** Subida del fichero (detecta UTF-8 y Windows-1252), asignación de columnas
+  con muestra real de filas, previsualización en el servidor y confirmación atómica en la base de datos.
+  El mapeo de columnas se recuerda en el navegador por nombre de entidad, sin almacenar movimientos.
+- **Idempotencia con huella anti-duplicados.** Cada apunte importado genera una huella (`import_ref`,
+  migración `0003`) calculada a partir de la fecha, el importe, el tipo (ingreso o gasto), la descripción
+  o referencia del extracto y su número de aparición en el fichero. Si descargas el extracto de los
+  últimos tres meses cuando ya habías importado los dos anteriores, la app detecta los repetidos y solo
+  crea los nuevos. La referencia bancaria sola no basta porque en recibos recurrentes se repite mes a mes.
+- **Detección y resolución de fechas ambiguas.** Si un fichero tiene fechas como `03/04/2026`, puede ser
+  3 de abril o 4 de marzo. El parser evalúa todas las filas del fichero: si una interpretación abarca un
+  intervalo de fechas significativamente más coherente y estrecho, se selecciona automáticamente. Si ambas
+  son plausibles, la API responde `422 ambiguous_date` y el asistente pide al usuario que elija el orden
+  (día/mes o mes/día) en vez de arriesgarse a guardar fechas erróneas.
+- **Formatos numéricos y multidivisa.** Soporta coma o punto decimal, separadores de miles con espacio o
+  punto, signo negativo delante (`-12,50`), detrás (`12,50-`) o entre paréntesis, y tanto columnas de importe
+  único con signo como columnas separadas para cargo y abono. Limpia símbolos (`€`, `$`) y códigos (`EUR`, `USD`).
+- **Sugerencia de categorías.** Si en movimientos anteriores categorizaste "MERCADONA" como Comida, la
+  previsualización sugiere automáticamente esa categoría para los movimientos con la misma descripción.
+- **Protección contra ficheros hostiles.** Límite de 2 MB y 5.000 filas por fichero, conteo preliminar de
+  separadores para descartar líneas degeneradas, análisis fuera del runtime asíncrono con `spawn_blocking` y
+  saneamiento estricto de caracteres invisibles y bytes NUL (`\0`) que harían fallar a PostgreSQL.
+
 ## Asesor con IA local
 
 **El código calcula y el modelo explica.** Rust obtiene las cifras exactas (resumen, informe, evolución)
@@ -109,9 +137,27 @@ navegador ──/api (proxy de Vite)──▶ backend Rust :8080 ──▶ Postg
   lectura abarca claramente menos tiempo. Si no, te pide que elijas el formato en vez de adivinarlo.
 - **CSV hostiles.** Como máximo 2 MB y 5.000 filas, con conteo previo de separadores, un fichero a la vez y
   fuera del runtime async: un fichero malicioso no dispara la memoria ni bloquea el servidor.
+- **Inyección de fórmulas en exportaciones CSV.** Al exportar movimientos o categorías (`/api/reports/export.csv`),
+  los campos que empiezan por `=`, `+`, `-` o `@` se neutralizan con una comilla simple (`'`) para evitar que
+  Excel o LibreOffice Calc interpreten el texto como fórmulas dinámicas ejecutables.
+- **Límites de importe y fecha contra desbordamiento.** Los movimientos limitan el importe a un máximo de
+  1.000 millones de euros y las fechas al intervalo 2000-2100. Esto protege las agregaciones en PostgreSQL
+  (`SUM(amount_cents)`) contra desbordamientos de `BIGINT` que dejarían el resumen del mes en 500.
+- **Fórmula de ahorro unificada y transparente.** La definición de ahorro vive en una función pura compartida
+  (`summary::calc::savings_cents`). Resumen, cubos e informes calculan exactamente lo mismo e informan del
+  remanente no gastado (`unspent_cents`) tanto en pantalla como en el PDF descargable.
+- **PDF vectorial generado en el navegador.** jsPDF dibuja el informe directamente en el cliente. Para no
+  engordar la carga inicial de la aplicación, la librería se descarga mediante importación dinámica solo al
+  pulsar el botón de exportación, y la página de informes reside en su propio chunk.
+- **Anonimización de datos sensibles (PII) en el asesor.** Antes de indexar en pgvector o persistir recuerdos,
+  un filtro sustituye IBANs, URLs, correos electrónicos, teléfonos y direcciones cripto por `[dato omitido]`,
+  evitando que información bancaria confidencial contamine la memoria a largo plazo.
 - **La BD es un servicio.** Si Postgres depende de una terminal o de un proceso suelto, el apagado del equipo
   puede cortarlo en mitad del checkpoint y corromper el clúster. Como servicio, systemd le envía SIGINT
   (apagado rápido y limpio) y espera a que termine antes de desmontar el almacenamiento del contenedor.
+- **Aislamiento de procesos y señales en `dev.sh`.** Backend, frontend y asesor se lanzan en grupos de procesos
+  separados (`setsid`). Si se pulsa Ctrl+C, un manejador envía SIGTERM a cada grupo y espera hasta 10 segundos
+  antes de forzar SIGKILL, evitando procesos huérfanos que dejen puertos ocupados.
 
 ### Fallos que solo salieron probándolo de verdad
 
@@ -122,6 +168,21 @@ navegador ──/api (proxy de Vite)──▶ backend Rust :8080 ──▶ Postg
   y se validó (ΔE ≥ 11), y el texto se separó en variantes con contraste AA.
 - La evolución dibujaba **una caída falsa a 0 €** en los meses anteriores al primer movimiento.
 - La fuente separaba la coma decimal de las cifras ("2100 , 00 €").
+- **Desbordamiento de `SUM(...)` en PostgreSQL con cifras grandes.** Al ingresar importes de prueba muy elevados,
+  la suma agregada desbordaba `BIGINT` en la base de datos y devolvía 500 para todo el mes hasta vaciar los
+  registros a mano. Se atajó con restricciones `CHECK` en SQL, validación en axum y límites en el formulario.
+- **`PANIC` en el checkpoint de Postgres al apagar el equipo.** Si el contenedor corría dependiente de un proceso
+  de terminal, systemd desmontaba `fuse-overlayfs` en paralelo mientras Postgres estaba cerrando transacciones.
+  Convertir el contenedor en unidad Quadlet de systemd aseguró una parada ordenada con `SIGINT` de hasta 60 segundos.
+- **Tres cifras de ahorro contradictorias para un mismo mes.** El resumen calculaba un 30 % (inversión más
+  remanente), la tasa de ahorro de informes mostraba un 10 % (solo el neto) y el cubo de ahorro un 20 % (solo
+  inversión). La fórmula se unificó en un único módulo y se explicitó el remanente no gastado en la interfaz.
+- **Caracteres NUL (`\0`) y bytes invisibles en extractos bancarios.** Un extracto real con bytes nulos provocaba
+  un error 500 no capturado al intentar persistir la descripción en PostgreSQL. Ahora las cadenas se limpian de
+  caracteres de control e invisibles de formato antes de llegar a la base de datos.
+- **Consumo persistente de CPU en Ollama tras cerrar la pestaña.** Si el usuario detenía la generación o cambiaba
+  de pantalla, el backend cerraba la conexión HTTP pero Ollama continuaba computando tokens durante minutos. Se
+  enlazó la desconexión del cliente HTTP con la cancelación de la petición en Ollama.
 
 ## Arrancar en local
 
@@ -178,6 +239,9 @@ Es una app para uso local o en una red de confianza, y todavía no está prepara
 - **Argon2 no tiene límite de concurrencia.** Muchos intentos de acceso simultáneos podrían agotar la memoria.
 - **El banco solo entra por CSV.** La sincronización automática está analizada en
   [`docs/BANCO.md`](docs/BANCO.md), pero sin implementar.
+- **Sin recuperación de contraseñas.** Al ser una instalación monousuario local, si olvidas la clave debes
+  restablecerla directamente en la base de datos.
+- **Monodivisa.** Todos los importes se registran en céntimos de la misma moneda; no soporta cambio entre divisas.
 - **Sin CI y sin tests automáticos en el frontend.** Las pruebas de la tabla anterior se lanzan a mano.
 
 ## Estructura
