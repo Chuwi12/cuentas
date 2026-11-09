@@ -1,5 +1,5 @@
 // Compactación de los facts de Rust para el prompt: texto corto en español, sin la serie diaria.
-import { isObj, type Facts, type Obj } from "./validate.ts";
+import { isObj, previousMonth, type Facts, type Obj } from "./validate.ts";
 
 export const MAX_FACTS_CHARS = 6000;
 const NOTE = "\n[Aviso: datos recortados por superar el límite de tamaño.]";
@@ -55,6 +55,67 @@ export function eur(cents: unknown): string {
 const pct = (p: number): string => `${p.toFixed(1).replace(".", ",")} %`;
 const bp = (v: unknown): string => pct(num(v) / 100);
 
+// Comparación con el mes anterior. El modelo de 4B no sabe restar ni distinguir un mes de otro: todo se calcula aquí, con enteros.
+/** Décimas de porcentaje (365 = 36,5 %) a partir del actual_pct de Rust, para que coincida con el bloque 50/30/20; null sin ingresos. */
+const tenths = (b: Obj | undefined, income: number): number | null => (income > 0 ? Math.round(num(b?.actual_pct) * 10) : null);
+const dec1 = (t: number): string => `${t < 0 ? "-" : ""}${Math.trunc(Math.abs(t) / 10)},${Math.abs(t) % 10}`;
+const plus = (n: number): string => (n > 0 ? "+" : ""); // el negativo ya trae su "-"
+const de = (t: number | null): string => (t === null ? "sin ingresos" : `${dec1(t)} % de los ingresos`);
+const NOTA_COMPARACION = "[Aviso: comparación con el mes anterior recortada por tamaño.]";
+
+/** `fijo` (cabecera, sin categoría y cubos) entra entero o no entra; las categorías, línea a línea. */
+function comparison(f: Facts): { fijo: string[]; catCab: string; cats: string[] } {
+  const prev = f.previous_summary;
+  const cur = f.summary;
+  const prevBuckets = rows(prev?.buckets);
+  const nada = { fijo: [], catCab: "", cats: [] };
+  if (!prev || prevBuckets.length === 0) return nada;
+  const [inc, prevInc] = [num(cur.income_cents), num(prev.income_cents)];
+  const mesAnterior = previousMonth(f.month);
+  // Un mes sin movimientos no es un "0": comparar con él invita al modelo a hablar de subidas del infinito por ciento.
+  if (prevInc === 0 && num(prev.expense_cents) === 0) return { ...nada, fijo: ["", `Comparación con el mes anterior (${mesAnterior}): ese mes no tiene movimientos, no hay nada con lo que comparar.`] };
+
+  // Un mes parcial contra uno completo: gasta menos y "ahorra" más (lo no gastado cuenta como ahorro) sin que sea una mejora.
+  const curso = f.month_in_progress ? ` ${f.month} está en curso${f.today ? ` (hasta ${f.today})` : ""}: sus importes son parciales, así que gastar menos o ahorrar más todavía no indica mejora frente a un mes completo: no lo presentes como un logro ni como un consejo seguido.` : "";
+  const fijo = [
+    "",
+    `Comparación con el mes anterior (${mesAnterior}).${curso} Diferencia = este mes - mes anterior; los puntos son puntos porcentuales sobre los ingresos de cada mes:`,
+    `Gasto sin categoría: ${eur(cur.uncategorized_expense_cents)} este mes (${eur(prev.uncategorized_expense_cents)} el mes anterior).`,
+  ];
+  const prevPorCubo = new Map(prevBuckets.map((x) => [x.bucket, x])); // un find por cubo era cuadrático con un cuerpo hostil
+  for (const b of rows(cur.buckets)) {
+    const p = prevPorCubo.get(b.bucket);
+    const [now, before] = [num(b.actual_cents), num(p?.actual_cents)];
+    const [tNow, tBefore] = [tenths(b, inc), tenths(p, prevInc)];
+    const puntos = tNow !== null && tBefore !== null ? ` y ${plus(tNow - tBefore)}${dec1(tNow - tBefore)} puntos` : "";
+    // Con subidas a la vista, el modelo daba por roto un tope que no lo estaba: el veredicto contra el objetivo también va calculado.
+    // Sin ingresos el objetivo es 0 y no significa nada; y el ahorro de un mes en curso todavía baja, así que no se sentencia.
+    // Los topes de un mes en curso salen de ingresos parciales y aún pueden subir: «por ahora» en los dos sentidos.
+    const t = b.target_cents;
+    const ahorro = b.bucket === "savings";
+    const veredicto =
+      inc > 0 && typeof t === "number" && !(ahorro && f.month_in_progress)
+        ? `; este mes ${ahorro ? (now >= t ? "por encima del mínimo" : "por debajo del mínimo") : `${f.month_in_progress ? "por ahora " : ""}${now <= t ? "dentro del tope" : "por encima del tope"}`} de ${eur(t)}`
+        : "";
+    fijo.push(`- ${BUCKET[String(b.bucket)] ?? clean(b.bucket, 20)}: ${eur(now)} (${de(tNow)}) este mes, ${eur(before)} (${de(tBefore)}) el mes anterior; diferencia ${plus(now - before)}${eur(now - before)}${puntos}${veredicto}`);
+  }
+
+  // Las 5 categorías de gasto mayores en cualquiera de los dos meses: así también sale la que ha desaparecido.
+  const byCat = new Map<string, { name: string; bucket: unknown; now: number; before: number }>();
+  for (const [mes, resumen] of [["now", cur], ["before", prev]] as const) {
+    for (const c of rows(resumen.by_category)) {
+      const cat = obj(c.category);
+      const key = String(cat.id ?? cat.name);
+      const e = byCat.get(key) ?? { name: clean(cat.name, 40), bucket: cat.bucket, now: 0, before: 0 };
+      e[mes] += num(c.amount_cents);
+      byCat.set(key, e);
+    }
+  }
+  const top = [...byCat.values()].sort((a, b) => Math.max(b.now, b.before) - Math.max(a.now, a.before)).slice(0, 5);
+  const cats = top.map((c) => `- ${c.name}${BUCKET[String(c.bucket)] ? ` (${BUCKET[String(c.bucket)]})` : ""}: ${eur(c.now)}, ${eur(c.before)}, diferencia ${plus(c.now - c.before)}${eur(c.now - c.before)}`);
+  return { fijo, catCab: "Categorías de gasto mayores (este mes, mes anterior, diferencia):", cats };
+}
+
 export function compactFacts(f: Facts): string {
   const { summary: s, report: r } = f;
   const totals = obj(r.totals);
@@ -108,12 +169,14 @@ export function compactFacts(f: Facts): string {
 
   const prev = obj(r.previous);
   const pt = obj(prev.totals);
-  if (isObj(prev.period)) {
+  // Con el mes en curso, los totales del anterior (completo) invitan a "has gastado menos": el modelo los restaba solo. Lo comparable va en la sección de comparación.
+  if (isObj(prev.period) && !f.month_in_progress) {
     lines.push("", `Mes anterior (${clean(String(prev.period.from).slice(0, 7), 7)}): ingresos ${eur(pt.income_cents)}, gastos ${eur(pt.expense_cents)}, neto ${eur(pt.net_cents)}${pt.savings_rate_bp == null ? "" : `, ahorro ${bp(pt.savings_rate_bp)} de los ingresos`}.`);
   }
 
   // largest_expense lleva la descripción del movimiento en texto libre; ese dato ya sale (citado y recortado) en los mayores movimientos.
-  const insights = rows(r.insights).filter((i) => i.code !== "largest_expense").slice(0, 12);
+  // expense_change compara el gasto parcial de un mes en curso con el del anterior completo ("el gasto baja un 49 %"): no es una mejora.
+  const insights = rows(r.insights).filter((i) => i.code !== "largest_expense" && !(f.month_in_progress && i.code === "expense_change")).slice(0, 12);
   if (insights.length) {
     lines.push("", "Avisos de la aplicación:");
     for (const i of insights) lines.push(`- [${clean(i.level, 10)}] ${clean(i.message, 200)}`);
@@ -123,6 +186,31 @@ export function compactFacts(f: Facts): string {
   if (points.length) {
     lines.push("", "Evolución mes a mes (ingresos, necesidades, deseos, ahorro):");
     for (const p of points) lines.push(`- ${clean(p.month, 7)}: ${eur(p.income_cents)}, ${eur(p.needs_cents)}, ${eur(p.wants_cents)}, ${eur(p.savings_cents)}`);
+  }
+
+  // Va al final, tras los rankings del mes (con los cambios a la vista el modelo leía "gastar más" como "subir"), y es lo primero que se
+  // recorta: solo entra lo que cabe en lo que deja el resto, el bloque fijo entero o nada, y si se queda algo fuera lo dice.
+  const { fijo, catCab, cats: mayores } = comparison(f);
+  if (fijo.length) {
+    const coste = (ls: string[]): number => ls.reduce((n, l) => n + l.length + 1, 0);
+    let room = MAX_FACTS_CHARS - lines.join("\n").length;
+    const completa = [...fijo, ...(mayores.length ? [catCab, ...mayores] : [])];
+    if (coste(completa) <= room) lines.push(...completa);
+    else {
+      room -= NOTA_COMPARACION.length + 1;
+      const extra: string[] = [];
+      if (coste(fijo) <= room) {
+        room -= coste(fijo);
+        let sobra = room - (catCab.length + 1);
+        for (const c of mayores) {
+          if (sobra < c.length + 1) break;
+          sobra -= c.length + 1;
+          extra.push(c);
+        }
+        lines.push(...fijo, ...(extra.length ? [catCab, ...extra] : []));
+      }
+      lines.push(NOTA_COMPARACION); // si ni la nota cabe, limitar() recorta el final y pone su propio aviso
+    }
   }
 
   return limitar(lines.join("\n"));

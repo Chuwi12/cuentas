@@ -35,6 +35,15 @@ test("parseFacts: exige objeto con summary, report, trend y un month válido", (
   for (const v of [null, [], "x", { ...ok, month: "2026-9" }, { ...ok, today: "mañana" }, { ...ok, today: undefined }, { ...ok, summary: null }, { ...ok, report: [] }, { ...ok, trend: undefined }]) invalido(() => parseFacts(v));
 });
 
+test("parseFacts: previous_summary es opcional y, si viene, un objeto del mes anterior", () => {
+  const ok = { month: "2026-09", today: "2026-10-02", month_in_progress: false, summary: {}, report: {}, trend: {} };
+  assert.equal("previous_summary" in parseFacts(ok), false); // backend anterior a este campo
+  const prev = { month: "2026-08", income_cents: 1 };
+  assert.deepEqual(parseFacts({ ...ok, previous_summary: prev }).previous_summary, prev);
+  assert.equal(parseFacts({ ...ok, month: "2026-01", previous_summary: { month: "2025-12" } }).previous_summary?.month, "2025-12");
+  for (const v of [null, [], "x", 3, {}, { month: "2026-09" }, { month: "2026-07" }, { month: "2025-12" }]) invalido(() => parseFacts({ ...ok, previous_summary: v }));
+});
+
 test("parseDate: YYYY-MM-DD real", () => {
   assert.equal(parseDate("2026-10-02", "facts.today"), "2026-10-02");
   assert.equal(parseDate("2028-02-29", "facts.today"), "2028-02-29");
@@ -57,7 +66,7 @@ test("loadConfig: sin token o con token corto no arranca", () => {
 test("loadConfig: defectos de docs/ASESOR.md y validación de valores", () => {
   const ok = { ASESOR_TOKEN: "t".repeat(32), ASESOR_DATABASE_URL: "postgres://x:y@127.0.0.1:5435/asesor" };
   const c = loadConfig(ok);
-  assert.deepEqual([c.port, c.ollamaUrl, c.model, c.embedModel, c.numCtx, c.keepAlive], [8090, "http://127.0.0.1:11434", "qwen3.5:4b", "embeddinggemma:300m-qat-q8_0", 4096, "5m"]);
+  assert.deepEqual([c.port, c.ollamaUrl, c.model, c.embedModel, c.numCtx, c.keepAlive], [8090, "http://127.0.0.1:11434", "qwen3.5:4b", "embeddinggemma:300m-qat-q8_0", 5120, "5m"]);
   assert.equal(loadConfig({ ...ok, ASESOR_KEEP_ALIVE: "300" }).keepAlive, 300);
   assert.equal(loadConfig({ ...ok, OLLAMA_URL: "http://127.0.0.1:11434/" }).ollamaUrl, "http://127.0.0.1:11434");
   assert.throws(() => loadConfig({ ...ok, ASESOR_PORT: "70000" }), /ASESOR_PORT/);

@@ -8,6 +8,8 @@ export interface Facts {
   today: string;
   month_in_progress: boolean;
   summary: Obj;
+  /** Resumen del mes anterior; puede faltar (un backend anterior a este campo no lo manda). */
+  previous_summary?: Obj;
   report: Obj;
   trend: Obj;
 }
@@ -50,11 +52,17 @@ export function parseDate(v: unknown, campo: string): string {
 export function parseFacts(v: unknown): Facts {
   if (!isObj(v)) throw bad("facts debe ser un objeto.");
   for (const k of ["summary", "report", "trend"]) if (!isObj(v[k])) throw bad(`facts.${k} debe ser un objeto.`);
+  const month = parseMonth(v.month, "facts.month");
+  const previous = v.previous_summary;
+  if (previous !== undefined && !isObj(previous)) throw bad("facts.previous_summary debe ser un objeto.");
+  // Una comparación contra otro mes sería peor que ninguna: el encabezado de compact.ts da por hecho este mes.
+  if (previous && previous.month !== previousMonth(month)) throw bad("facts.previous_summary.month no es el mes anterior a facts.month.");
   return {
-    month: parseMonth(v.month, "facts.month"),
+    month,
     today: parseDate(v.today, "facts.today"),
     month_in_progress: v.month_in_progress === true,
     summary: v.summary as Obj,
+    ...(previous && { previous_summary: previous }),
     report: v.report as Obj,
     trend: v.trend as Obj,
   };

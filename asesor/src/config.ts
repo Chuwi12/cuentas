@@ -59,7 +59,7 @@ export function loadConfig(env: Env = process.env): Config {
     ollamaUrl,
     model: text("ASESOR_MODEL", "qwen3.5:4b"),
     embedModel: text("ASESOR_EMBED_MODEL", "embeddinggemma:300m-qat-q8_0"),
-    numCtx: int("ASESOR_NUM_CTX", 4096, 1024, 131072),
+    numCtx: int("ASESOR_NUM_CTX", 5120, 1024, 131072),
     // Ollama rechaza "300" sin unidad: los enteros van como número (segundos).
     keepAlive: /^-?\d+$/.test(keepAliveRaw) ? Number(keepAliveRaw) : keepAliveRaw,
   };

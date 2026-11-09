@@ -105,6 +105,7 @@ El asesor vuelve a validar lo que recibe (uuid, month, longitud de la pregunta, 
   "today": "2026-10-31",
   "month_in_progress": true,          // el ahorro de un mes en curso todavía bajará
   "summary": SummaryResponse,         // lo mismo que GET /api/summary?month=<month>
+  "previous_summary": SummaryResponse, // ídem del mes anterior (enero → diciembre del año anterior)
   "report": ReportResponse,           // lo mismo que GET /api/reports?period=month&date=<month>-01
   "trend": TrendResponse              // 6 meses que TERMINAN en <month>
 }
@@ -113,6 +114,26 @@ El asesor vuelve a validar lo que recibe (uuid, month, longitud de la pregunta, 
 Todo el dinero va en céntimos, como en el resto de la API. El asesor compacta estos datos antes
 de meterlos en el prompt (sin la serie diaria, categorías y movimientos recortados) para que
 quepan en `ASESOR_NUM_CTX`.
+
+`previous_summary` es opcional para el asesor (si falta, no hay sección de comparación) y su
+`month` debe ser el anterior a `month`, o se rechaza con `422`. Con él, el asesor añade al final de
+los datos del prompt la sección «Comparación con el mes anterior»: por cubo, el importe y el % de
+ingresos de cada mes, la diferencia en € y en puntos y si este mes está dentro del tope (o por
+encima del mínimo); el gasto sin categoría de los dos meses (aunque sea 0); y las 5 categorías de
+gasto mayores de cualquiera de los dos meses. Toda esa aritmética y esos veredictos se calculan en
+código (céntimos enteros; el % es el `actual_pct` de Rust, para que coincida con el reparto 50/30/20):
+el modelo de 4B se equivocaba al deducirlos, o los sacaba de la memoria de otro mes. Casos
+especiales: sin ingresos este mes no hay veredicto (el objetivo sería 0 €); en un mes en curso la
+cabecera avisa de que sus importes son parciales y no hay veredicto de ahorro (los topes dicen «por
+ahora»); si el mes anterior no tiene movimientos, la sección es una línea que lo dice. Si los datos
+no caben en 6000 caracteres, lo primero que se recorta es esta sección: el bloque de cabecera,
+gasto sin categoría y cubos entra entero o no entra, las categorías van línea a línea, y si falta
+algo se añade una nota de recorte.
+
+La sección tiene un coste: unos 1.100 caracteres más de datos en un mes con mes anterior (de 1.978 a
+3.109 en las pruebas, un 32 % más de prompt). Además, con cambios a la vista el modelo leía
+«¿en qué categoría gasté más?» como «¿dónde subió más?»; por eso `tareaPregunta` le indica que
+ignore la sección si la pregunta no compara meses.
 
 ## Memoria (pgvector, BD propia del asesor)
 
@@ -143,7 +164,8 @@ Cómo aprende:
 - **Cada análisis y cada conversación se guardan** con su embedding.
 - **Al analizar un mes**, el prompt incluye el análisis del mes anterior (por `month`, no por
   similitud) y las 3 memorias más parecidas. El modelo debe decir si los consejos anteriores se
-  siguieron, contrastándolos con las cifras nuevas.
+  siguieron, contrastándolos con la sección de comparación con el mes anterior (las cifras de la
+  memoria son de otros meses y no se atribuyen al actual).
 - **Al responder una pregunta**, se recuperan las 4 memorias más parecidas a la pregunta.
 - Todo recuerdo lleva su fecha en el prompt, y se avisa al modelo de que lo antiguo puede estar
   desactualizado. El usuario puede ver y borrar cualquier recuerdo.
@@ -159,7 +181,7 @@ Cómo aprende:
 | `OLLAMA_URL` | asesor | `http://127.0.0.1:11434` | Ollama nunca debe escuchar fuera de localhost |
 | `ASESOR_MODEL` | asesor | `qwen3.5:4b` | provisional hasta medir en CPU |
 | `ASESOR_EMBED_MODEL` | asesor | `embeddinggemma:300m-qat-q8_0` | 768 dimensiones |
-| `ASESOR_NUM_CTX` | asesor | `4096` | la ventana de contexto pesa en RAM |
+| `ASESOR_NUM_CTX` | asesor | `5120` | la ventana de contexto pesa en RAM: con `qwen3.5:4b`, 5120 ocupa unos 100 MiB más que 4096 (3.043 frente a 2.941 MiB). Se subió para que, con la sección de comparación, sigan entrando la memoria del mes anterior y las parecidas |
 | `ASESOR_KEEP_ALIVE` | asesor | `5m` | cuánto tiempo sigue cargado el modelo en memoria tras usarlo |
 
 ## Rendimiento y despliegue
@@ -196,5 +218,9 @@ Al desplegar:
 
 Límites conocidos del modelo de 4B, observados en pruebas: interpreta mal algunas cifras correctas,
 por ejemplo atribuyendo al mes actual un dato que viene de la memoria de otro mes, o confundiendo
-"% del gasto" con "% de los ingresos". Las cifras que recibe son exactas, pero sus conclusiones hay
-que leerlas como las de un asistente, no como las de un informe.
+"% del gasto" con "% de los ingresos". La sección de comparación con el mes anterior reduce el
+primer fallo, pero no lo elimina (ni el de decir que el mes está en curso cuando está cerrado). En un
+mes en curso sigue presentando como «ahorro de gasto» la comparación de totales parciales con los del
+mes anterior completo, aunque el prompt se lo desaconseje. Las
+cifras que recibe son exactas, pero sus conclusiones hay que leerlas como las de un asistente, no
+como las de un informe.
