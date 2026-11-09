@@ -259,3 +259,9 @@ deploy/              servicios Quadlet de las dos BD
 docs/                contrato de API, asesor, análisis del banco y capturas
 scripts/             base de datos, arranque y prueba de punta a punta
 ```
+
+## Licencia
+
+[GNU AGPL-3.0-or-later](LICENSE) © 2026 Sergio Rodríguez. Puedes usarla, estudiarla, modificarla y compartirla; si
+distribuyes una versión modificada o la ofreces como servicio en red, tienes que publicar su código con la misma
+licencia y conservar los avisos de copyright.
