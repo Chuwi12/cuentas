@@ -79,7 +79,7 @@
       {
         "category": {
           "id": "6f1c2a10-0000-4000-8000-00000000000a",
-          "name": "Inversión",
+          "name": "Inversi\u00f3n",
           "kind": "expense",
           "bucket": "savings",
           "color": "#0369a1",
@@ -145,6 +145,124 @@
         },
         "amount_cents": 3500,
         "pct_of_income": 1.4
+      }
+    ]
+  },
+  "previous_summary": {
+    "month": "2026-08",
+    "income_cents": 250000,
+    "expense_cents": 184200,
+    "buckets": [
+      {
+        "bucket": "needs",
+        "target_pct": 50,
+        "target_cents": 125000,
+        "actual_cents": 110000,
+        "delta_cents": -15000,
+        "actual_pct": 44.0
+      },
+      {
+        "bucket": "wants",
+        "target_pct": 30,
+        "target_cents": 75000,
+        "actual_cents": 44200,
+        "delta_cents": -30800,
+        "actual_pct": 17.68
+      },
+      {
+        "bucket": "savings",
+        "target_pct": 20,
+        "target_cents": 50000,
+        "actual_cents": 95800,
+        "delta_cents": 45800,
+        "actual_pct": 38.32
+      }
+    ],
+    "uncategorized_expense_cents": 0,
+    "by_category": [
+      {
+        "category": {
+          "id": "6f1c2a10-0000-4000-8000-000000000003",
+          "name": "Alquiler",
+          "kind": "expense",
+          "bucket": "needs",
+          "color": "#c2410c",
+          "icon": "house",
+          "is_archived": false,
+          "sort_order": 0
+        },
+        "amount_cents": 65000,
+        "pct_of_income": 26.0
+      },
+      {
+        "category": {
+          "id": "6f1c2a10-0000-4000-8000-000000000009",
+          "name": "Ocio",
+          "kind": "expense",
+          "bucket": "wants",
+          "color": "#c026d3",
+          "icon": "party-popper",
+          "is_archived": false,
+          "sort_order": 0
+        },
+        "amount_cents": 34200,
+        "pct_of_income": 13.68
+      },
+      {
+        "category": {
+          "id": "6f1c2a10-0000-4000-8000-000000000004",
+          "name": "Comida",
+          "kind": "expense",
+          "bucket": "needs",
+          "color": "#d97706",
+          "icon": "utensils",
+          "is_archived": false,
+          "sort_order": 0
+        },
+        "amount_cents": 30000,
+        "pct_of_income": 12.0
+      },
+      {
+        "category": {
+          "id": "6f1c2a10-0000-4000-8000-00000000000a",
+          "name": "Inversi\u00f3n",
+          "kind": "expense",
+          "bucket": "savings",
+          "color": "#0369a1",
+          "icon": "trending-up",
+          "is_archived": false,
+          "sort_order": 0
+        },
+        "amount_cents": 30000,
+        "pct_of_income": 12.0
+      },
+      {
+        "category": {
+          "id": "6f1c2a10-0000-4000-8000-000000000005",
+          "name": "Suministros",
+          "kind": "expense",
+          "bucket": "needs",
+          "color": "#b45309",
+          "icon": "zap",
+          "is_archived": false,
+          "sort_order": 0
+        },
+        "amount_cents": 15000,
+        "pct_of_income": 6.0
+      },
+      {
+        "category": {
+          "id": "6f1c2a10-0000-4000-8000-000000000008",
+          "name": "Ropa",
+          "kind": "expense",
+          "bucket": "wants",
+          "color": "#9333ea",
+          "icon": "shirt",
+          "is_archived": false,
+          "sort_order": 0
+        },
+        "amount_cents": 10000,
+        "pct_of_income": 4.0
       }
     ]
   },
@@ -361,7 +479,7 @@
     "by_category": [
       {
         "category_id": "6f1c2a10-0000-4000-8000-000000000001",
-        "name": "Nómina",
+        "name": "N\u00f3mina",
         "color": "#2f7d5e",
         "kind": "income",
         "bucket": null,
@@ -401,7 +519,7 @@
       },
       {
         "category_id": null,
-        "name": "Sin categoría",
+        "name": "Sin categor\u00eda",
         "color": "#9ca3af",
         "kind": "expense",
         "bucket": null,
@@ -411,7 +529,7 @@
       },
       {
         "category_id": "6f1c2a10-0000-4000-8000-00000000000a",
-        "name": "Inversión",
+        "name": "Inversi\u00f3n",
         "color": "#0369a1",
         "kind": "expense",
         "bucket": "savings",
@@ -506,8 +624,8 @@
         "occurred_on": "2026-09-01",
         "kind": "income",
         "amount_cents": 235000,
-        "description": "Nómina septiembre",
-        "category_name": "Nómina",
+        "description": "N\u00f3mina septiembre",
+        "category_name": "N\u00f3mina",
         "category_color": "#2f7d5e"
       },
       {
@@ -533,8 +651,8 @@
         "occurred_on": "2026-09-05",
         "kind": "expense",
         "amount_cents": 20000,
-        "description": "Aportación mensual fondo indexado",
-        "category_name": "Inversión",
+        "description": "Aportaci\u00f3n mensual fondo indexado",
+        "category_name": "Inversi\u00f3n",
         "category_color": "#0369a1"
       },
       {
@@ -588,22 +706,22 @@
       {
         "code": "top_category",
         "level": "info",
-        "message": "Alquiler concentra el 31 % del gasto (650,00 €)."
+        "message": "Alquiler concentra el 31 % del gasto (650,00 \u20ac)."
       },
       {
         "code": "largest_expense",
         "level": "info",
-        "message": "Tu mayor gasto fue 650,00 € el 2026-09-02 (Alquiler septiembre)."
+        "message": "Tu mayor gasto fue 650,00 \u20ac el 2026-09-02 (Alquiler septiembre)."
       },
       {
         "code": "daily_average",
         "level": "info",
-        "message": "Gastas de media 70,63 € al día."
+        "message": "Gastas de media 70,63 \u20ac al d\u00eda."
       },
       {
         "code": "uncategorized",
         "level": "info",
-        "message": "Tienes 280,00 € en gastos sin categoría."
+        "message": "Tienes 280,00 \u20ac en gastos sin categor\u00eda."
       }
     ]
   },

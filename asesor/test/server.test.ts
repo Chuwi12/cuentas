@@ -218,7 +218,7 @@ test("POST /analisis: stream NDJSON con deltas y done; guarda y GET /analisis lo
 test("POST /analisis de otro mes recibe el análisis del mes anterior como recuerdo", async () => {
   reset();
   await (await api("/analisis", { method: "POST", body: bodyAnalisis() })).text();
-  const oct = { ...facts, month: "2026-10", month_in_progress: true };
+  const oct = { ...facts, month: "2026-10", month_in_progress: true, previous_summary: { ...facts.previous_summary, month: "2026-09" } };
   await (await api("/analisis", { method: "POST", body: bodyAnalisis({ month: "2026-10", facts: oct }) })).text();
   const memoria = llm.llamadas[1]?.memoria ?? "";
   assert.match(memoria, /\[Análisis del mes anterior de 2026-09, guardado el \d{4}-\d\d-\d\d; puede estar desactualizado\]\nHola mundo/);
