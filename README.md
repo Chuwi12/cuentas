@@ -47,8 +47,8 @@ un LLM local analiza cada mes y responde preguntas sobre tus datos.
 |---|---|---|
 | ![Pantalla de acceso](docs/capturas/acceso.png) | ![Resumen en móvil](docs/capturas/movil-resumen.png) | ![Movimientos en móvil](docs/capturas/movil-movimientos.png) |
 
-<sub>El análisis del asesor es la salida real del modelo de 4B, sin retocar, y se ven sus límites: dice que la
-inversión bajó cuando fue la misma que el mes anterior.</sub>
+<sub>El análisis del asesor es la salida real del modelo de 4B, sin retocar, y se ven sus límites: atribuye a las
+necesidades una subida del ocio, que es un deseo, y presenta como mejora haber gastado más en deseos que el mes anterior.</sub>
 
 ## Cómo se calcula el 50/30/20
 
@@ -100,7 +100,9 @@ cómo se marca un cargo. La importación no depende de un formato concreto:
 ## Asesor con IA local
 
 **El código calcula y el modelo explica.** Rust obtiene las cifras exactas (resumen, informe, evolución)
-y se las pasa al modelo, al que el prompt prohíbe usar cifras que no estén en esos datos.
+y se las pasa al modelo, al que el prompt prohíbe usar cifras que no estén en esos datos. La comparación con el
+mes anterior también llega hecha: por cada cubo, la diferencia en euros y en puntos y si está dentro de su tope.
+El modelo de 4B fallaba al restar o mezclaba cifras de otros meses de su memoria.
 
 - **Memoria con RAG.** Cada análisis y cada conversación se guardan con su embedding en pgvector. Al
   analizar un mes, el prompt incluye el análisis del mes anterior y las memorias más parecidas, y el
@@ -208,9 +210,9 @@ ollama pull embeddinggemma:300m-qat-q8_0
 
 | Comando | Qué comprueba |
 |---|---|
-| `cd backend && cargo test` | 149 tests unitarios |
+| `cd backend && cargo test` | 150 tests unitarios |
 | `python3 scripts/e2e.py` | 170 comprobaciones de la API con el backend en marcha, con las cifras del 50/30/20, de los informes y de la importación calculadas a mano. Se niega a correr si la BD ya tiene un usuario |
-| `cd asesor && npm test && npm run check` | 57 tests y tipos. Los 3 de integración se saltan solos sin Postgres con pgvector y Ollama |
+| `cd asesor && npm test && npm run check` | 73 tests y tipos. Los 3 de integración se saltan solos sin Postgres con pgvector y Ollama |
 | `cd frontend && npx tsc -b && npx oxlint src` | Tipos y lint |
 
 ## Seguridad
